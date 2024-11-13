@@ -1,3 +1,6 @@
 [submodule "machamp"]
 	path = machamp
 	url = https://github.com/machamp-nlp/machamp.git
+[submodule "CoDeLin"]
+	path = CoDeLin
+	url = https://github.com/Polifack/CoDeLin

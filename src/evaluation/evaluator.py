@@ -1,0 +1,83 @@
+import os
+import subprocess
+from typing import Set, Optional, Dict, List
+
+
+class Evaluator:
+    def __init__(self, 
+                 encoder: Optional[str] = None,
+                 dataset: Optional[str] = None,
+                 encoding: Optional[str] = None,
+                 device: Optional[int] = None):
+        self.reset()
+        # Model specific attributes
+        self.encoder = encoder
+        self.dataset = dataset
+        self.encoding = encoding
+        self.device = device
+        
+        if encoder and dataset:
+            self.model_dirs = f'logs/machamp/{dataset}/{encoder}/{encoding}/'
+            self.seeds = sorted([d.split('_')[-1] for d in os.listdir(self.model_dirs) 
+                               if d.startswith('seed_') and os.path.isdir(os.path.join(self.model_dirs, d))])
+
+    def reset(self) -> None:
+        self.n_correct = 0
+        self.n_gold = 0
+        self.n_pred = 0
+        self.decoder_timing = 0
+
+    def __call__(self, gold: Set, pred: Set) -> None:
+        self.n_correct += len(gold.intersection(pred))
+        self.n_gold += len(gold)
+        self.n_pred += len(pred)
+
+    def precision(self) -> float:
+        return 0 if self.n_pred == 0 else self.n_correct / self.n_pred
+
+    def recall(self) -> float:
+        return 0 if self.n_gold == 0 else self.n_correct / self.n_gold
+
+    def f1(self) -> float:
+        prec = self.precision()
+        rec = self.recall()
+        return 0 if prec + rec == 0 else 2 * prec * rec / (prec + rec)
+
+    def write(self, ostream, dataset_name: str) -> None:
+        ostream.write(f"Eval on {dataset_name} with {getattr(self, 'algorithm', 'default')}:\t"
+                     f"prec={100 * self.precision():.2f}\t"
+                     f"rec={100 * self.recall():.2f}\t"
+                     f"f1={100 * self.f1():.2f}\t"
+                     f"timing={self.decoder_timing}")
+
+    def calculate_metrics(self, gold_data: List, predicted_data: List) -> Dict[str, float]:
+        from src.data.utils import find_entities
+        
+        gold_entities = find_entities(gold_data)
+        predicted_entities = find_entities(predicted_data)
+        
+        for gold, pred in zip(gold_entities, predicted_entities):
+            self(gold, pred)
+        
+        return {
+            "precision": self.precision(),
+            "recall": self.recall(),
+            "f1": self.f1()
+        }
+
+    def predict(self, seed: str) -> str:
+        if not all([self.encoder, self.dataset, self.encoding]):
+            raise ValueError("Model parameters not configured for prediction")
+            
+        model_dir = f"{self.model_dirs}seed_{seed}"
+        input_file = f'clean_data/{self.dataset}/{self.encoding}/test.labels'    
+        output_file = f'{model_dir}/output.labels'
+        
+        subprocess.run([
+            'python', 'machamp/predict.py',
+            f'{model_dir}/model.pt', input_file, output_file,
+            '--device', str(self.device),
+            '--dataset', self.dataset
+        ], check=True)
+                
+        return output_file
