@@ -55,7 +55,7 @@ if not os.path.exists(f'data/{args.dataset}/{args.encoding}/train.labels'):
 for seed in range(int(args.n_seeds)):
     config_creator = ConfigCreator(args.dataset, args.encoder,args.encoding, 
                                    seed, template_dir='parameter_configs')
-    model_dir = f'machamp/{args.dataset}/{encoder_name}/{args.encoding}/seed_{seed}'
+    model_dir = f'logs/machamp/{args.dataset}/{encoder_name}/{args.encoding}/seed_{seed}'
     dataset_config = config_creator.create_dataset_config()
     parameter_config = config_creator.create_parameters_config()
 
