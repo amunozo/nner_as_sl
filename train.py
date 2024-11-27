@@ -16,12 +16,12 @@ machamp_training_script = 'machamp/train.py'
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument("--dataset", help="NNER dataset")
-parser.add_argument('--encoder', help="Encoder model from HuggingFace.")
+parser.add_argument("--dataset", help="NNER dataset", required=True)
+parser.add_argument('--encoder', help="Encoder model from HuggingFace.", required=True)
 parser.add_argument('--encoding', help="Sequence labeling encoding", 
-                    choices=['ABS', 'REL', 'JUX', 'DYN'])
-parser.add_argument('--device', default=None, type=int)
-parser.add_argument('--n_seeds', 
+                    choices=['ABS', 'REL', 'JUX', 'DYN'], required=True)
+parser.add_argument('--device', default=0, type=int)
+parser.add_argument('--n_seeds',
                     help="Number of random initializations for the experiment", 
                     default=1)
 
