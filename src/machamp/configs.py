@@ -46,8 +46,8 @@ class ConfigCreator:
         """
         dataset_config = {
             f"{self.dataset}": {
-                "train_data_path": f"clean_data/{self.dataset}/{self.encoding}/train.labels",
-                "dev_data_path": f"clean_data/{self.dataset}/{self.encoding}/dev.labels",
+                "train_data_path": f"data/{self.dataset}/{self.encoding}/train.labels",
+                "dev_data_path": f"data/{self.dataset}/{self.encoding}/dev.labels",
                 "word_idx": 0,
                 "tasks": {
                     "ci": {
