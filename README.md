@@ -14,8 +14,6 @@ Alternatively:
 ```bash
 git clone https://github.com/amunozo/nner_as_sl.git
 cd nner_as_sl
-git clone https://github.com/machamp-nlp/machamp
-git clone https://github.com/Polifack/CoDeLin
 ```
 
 ### 2. Install dependencies:
