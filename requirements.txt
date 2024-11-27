@@ -1,7 +1,8 @@
-transformers>=4.0.0
-torch>=1.7.0
-allennlp>=1.3
-networkx
-uniplot # Recommended for plots each epoch
-networkx==2.5 # for cleaning UD
-stanza
+transformers==4.44.0
+torch==2.4.0
+networkx==3.3
+uniplot==0.13
+stanza==1.8.2
+nltk
+jsonnet
+sentencepiece
