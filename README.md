@@ -4,13 +4,21 @@ Code for training and evaluating nested NER models using transformers-based arch
 
 ## Setup
 
-1. Clone repository with submodule:
+### 1. Clone repository with submodules:
 ```bash
-git clone --recurse-submodules https://github.com/your-username/nner_as_sl.git
+git clone --recurse-submodules https://github.com/amunozo/nner_as_sl.git
 cd nner_as_sl
 ```
 
-2. Install dependencies:
+Alternatively:
+```bash
+git clone https://github.com/amunozo/nner_as_sl.git
+cd nner_as_sl
+git clone https://github.com/machamp-nlp/machamp
+git clone https://github.com/Polifack/CoDeLin
+```
+
+### 2. Install dependencies:
 ```bash
 pip install -r requirements.txt
 ```
@@ -28,20 +36,21 @@ Activation of the CD28 surface receptor provides a major costimulatory signal fo
 The datasets must be stored in the `data` directory, and the dataset split must be named as `train.data`, `dev.data`, and `test.data`.
 
 ## Usage
-### Training
+### Training example
 ```bash
-python train_machamp.py \
-  --dataset DATASET \
+python train.py \
+  --dataset genia \
   --encoder bert-base-uncased \
-  --encoding ENCODING \
-  --device 0
+  --encoding REL \
+  --device DEVICE \
+  --n_seeds 0
 ```
 
-### Evaluation 
+### Evaluation example
 ```bash
-python evaluate_machamp.py \
-  --dataset DATASET \
+python evaluate.py \
+  --dataset genia \
   --encoder bert-base-uncased \
-  --encoding ENCODING \
+  --encoding REL \
   --device 0
 ```
