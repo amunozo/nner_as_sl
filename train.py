@@ -61,4 +61,4 @@ for seed in range(int(args.n_seeds)):
 
     os.system(f'python machamp/train.py --dataset_configs {dataset_config} \
             --device {args.device} --parameters_config {parameter_config} \
-            --seed {seed} --name {model_dir}')
+            --seed {seed} --model_dir {model_dir}')
