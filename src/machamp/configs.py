@@ -2,7 +2,7 @@ import json
 import os
 
 class ConfigCreator:
-    def __init__(self, dataset, encoder, encoding, seed, metric, template_dir='parameter_configs'):
+    def __init__(self, dataset, encoder, encoding, seed, template_dir='parameter_configs'):
         """
         Initialize the ConfigCreator with dataset, encoder, encoding, seed, and optional template directory.
         """
@@ -10,10 +10,9 @@ class ConfigCreator:
         self.encoder = encoder
         self.encoding = encoding
         self.seed = seed
-        self.metric = metric
         self.template_dir = template_dir
         self.encoder_name = encoder.split('/')[-1]
-        self.model_dir = f'logs/machamp/{dataset}/{self.encoder_name}/{encoding}/{metric}/seed_{seed}'
+        self.model_dir = f'logs/machamp/{dataset}/{self.encoder_name}/{encoding}/seed_{seed}'
         self._ensure_model_directory()
 
     def _ensure_model_directory(self):
@@ -54,17 +53,14 @@ class ConfigCreator:
                     "ci": {
                         "task_type": "seq",
                         "column_idx": 2,
-                        "metric": self.metric
                     },
                     "ni": {
                         "task_type": "seq",
                         "column_idx": 3,
-                        "metric": self.metric
                     },
                     "ui": {
                         "task_type": "seq",
                         "column_idx": 4,
-                        "metric": self.metric
                     },
                 }
             }
@@ -75,11 +71,5 @@ class ConfigCreator:
             json.dump(dataset_config, f)
         
         return config_path
-
-
-
-if __name__ == '__main__':
-    create_parameters_config("GermEval2017", "bert-base-multilingual-cased", "ABS")
-    create_dataset_config("GermEval2017", "bert-base-multilingual-cased", "ABS")
 
 
