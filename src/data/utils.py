@@ -306,43 +306,25 @@ def extract_entities_from_tree(tree):
     text, entities = traverse_tree(tree, 0)
     return text, entities
 
-def extract_entities_from_str(entities_str, data_format):
+def extract_entities_from_str(entities_str):
     """
     Given the entity annotation in string format, returns a list of dicts 
     with label, start, and end of the entity.
     """
-    if data_format == 'tuples':
-        entities = set([
-            (
-                entity.split(' ')[1],
-                int(span.split(',')[0]),
-                int(span.split(',')[1])
-            )
-            for entity in entities_str.split('|')
-            for span in [entity.split(' ')[0]]
-        ])
+    entities = set([
+        (
+            entity.split(' ')[1],
+            int(span.split(',')[0]),
+            int(span.split(',')[1])
+        )
+        for entity in entities_str.split('|')
+        for span in [entity.split(' ')[0]]
+    ])
     
-    elif data_format == 'dict':
-        entities = [
-            {
-                "label": entity.split(' ')[1],
-                "start": int(span.split(',')[0]),
-                "end": int(span.split(',')[1])
-            }
-            for entity in entities_str.split('|')
-            for span in [entity.split(' ')[0]]
-        ]
-    elif data_format == 'string':
-        entities = set([
-                f"{int(span.split(',')[0])},{int(span.split(',')[1])} {entity.split(' ')[1]}, "
-            for entity in entities_str.split('|')
-            for span in [entity.split(' ')[0]]
-        ])
- 
     return entities
 
 
-def find_entities(file_path, evaluation):
+def find_entities(file_path):
     """
     Given a NNER data file, it returns a list of lists of tuples with
     start, end and entity type for every sentence.
@@ -353,16 +335,9 @@ def find_entities(file_path, evaluation):
     entities_str_list = [line.split('\n')[1] if len(line.split('\n')) == 2 else '' for line in lines]
     entities_list = []
 
-    if evaluation == 'nervaluate':
-        data_format = 'dict'
-    elif evaluation == 'caio':
-        data_format = 'tuples'
-    elif evaluation == 'triaffine':
-        data_format = 'string'
-
     for entities_str in entities_str_list:
         if entities_str != '':
-            entities = extract_entities_from_str(entities_str, data_format)
+            entities = extract_entities_from_str(entities_str)
         else:
             entities = set()
 
