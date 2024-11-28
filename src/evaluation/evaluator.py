@@ -1,6 +1,7 @@
 import os
 import subprocess
 from typing import Set, Optional, Dict, List
+from src.data.utils import find_entities
 
 
 class Evaluator:
@@ -50,9 +51,7 @@ class Evaluator:
                      f"f1={100 * self.f1():.2f}\t"
                      f"timing={self.decoder_timing}")
 
-    def calculate_metrics(self, gold_data: List, predicted_data: List) -> Dict[str, float]:
-        from src.data.utils import find_entities
-        
+    def calculate_metrics(self, gold_data: List, predicted_data: List) -> Dict[str, float]:        
         gold_entities = find_entities(gold_data)
         predicted_entities = find_entities(predicted_data)
         
@@ -70,7 +69,7 @@ class Evaluator:
             raise ValueError("Model parameters not configured for prediction")
             
         model_dir = f"{self.model_dirs}seed_{seed}"
-        input_file = f'clean_data/{self.dataset}/{self.encoding}/test.labels'    
+        input_file = f'data/{self.dataset}/{self.encoding}/test.labels'    
         output_file = f'{model_dir}/output.labels'
         
         subprocess.run([
