@@ -228,7 +228,7 @@ def build_tree(text_str, entities):
         _, entity_type = stack.pop()
         result.append(")")
 
-    return f"(ROOT {' '.join(result)})"
+    return f"(ROOT {' '.join(result).replace(' )', ')')})"
 
 
 def remove_bos_eos(input_file):
