@@ -4,3 +4,6 @@
 *.labels
 *.trees
 logs/
+notebooks/
+*.sh
+machamp
