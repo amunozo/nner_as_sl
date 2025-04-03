@@ -12,7 +12,6 @@ if __name__ == "__main__":
     parser.add_argument('--dataset', type=str, required=True, help="Name of the dataset we want to evaluate the \
                         model on")
     parser.add_argument('--device', type=str, default='0', help="Device to run the evaluation on")
-    parser.add_argument('--evaluator', default='caio', choices=['caio', 'nervaluate'])
 
 
     args = parser.parse_args()
@@ -20,7 +19,6 @@ if __name__ == "__main__":
 
     evaluator = Evaluator(args.encoder, args.dataset, args.encoding, args.device)
     all_results = []
-    all_results_per_tag = []
     model_dirs = f'logs/machamp/{evaluator.dataset}/{evaluator.encoder}/{evaluator.encoding}/' 
     gold_data = f'data/{evaluator.dataset}/test.data'
 
@@ -37,17 +35,6 @@ if __name__ == "__main__":
         all_results.append(results)
 
 
-    # average accross categories
-    if args.evaluator == 'nervaluate': 
-        average_results = average_dictionary(all_results)
-        with open(f'{model_dirs}/results.json', 'w') as f:
-                json.dump(average_results, f)
-
-        average_results_per_tag = average_dictionary(all_results_per_tag)
-        with open(f'{model_dirs}/results_per_tag.json', 'w') as f:
-                json.dump(average_results_per_tag, f)
-    
-    elif args.evaluator == 'caio':
-        print(all_results)
-        with open(f'{model_dirs}/results_caio.json', 'w') as f:
-                json.dump(all_results[0], f)
+    print(all_results)
+    with open(f'{model_dirs}/avg_results.json', 'w') as f:
+        json.dump(all_results[0], f)
