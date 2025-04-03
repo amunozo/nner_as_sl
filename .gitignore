@@ -4,6 +4,7 @@
 *.labels
 *.trees
 logs/
+*.txt
 notebooks/
 *.sh
 machamp
