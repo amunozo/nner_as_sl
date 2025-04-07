@@ -55,17 +55,19 @@ class Evaluator:
         gold_entities = find_entities(gold_data)
         predicted_entities = find_entities(predicted_data)
         
+        self.reset()
         for gold, pred in zip(gold_entities, predicted_entities):
             self(gold, pred)
         
-        return {
-            "precision": self.precision(),
-            "recall": self.recall(),
-            "f1": self.f1(),
-            "n_pred": self.n_pred,
-            "n_gold": self.n_gold,
-            "n_correct": self.n_correct
-        }
+        results = {}
+        results["precision"] = self.precision()
+        results["recall"] = self.recall()
+        results["f1"] = self.f1()
+        results["n_pred"] = self.n_pred
+        results["n_gold"] = self.n_gold
+        results["n_correct"] = self.n_correct
+
+        return results
 
     def calculate_metrics_by_label(self, gold_data: List, predicted_data: List) -> Dict[str, Dict[str, float]]:
         gold_entities = find_entities(gold_data)
