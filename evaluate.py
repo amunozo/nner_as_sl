@@ -14,6 +14,7 @@ if __name__ == "__main__":
     parser.add_argument('--predict', action='store_true', help="Whether to predict (default: False)")
     parser.add_argument('--no-predict', dest='predict', action='store_false', help="Whether to use existing predictions")
     parser.add_argument('--by-label', action='store_true', help="Evaluate metrics by label")
+    parser.add_argument('--by-depth', action='store_true', help="Evaluate metrics by depth")
     parser.set_defaults(predict=True, by_depth=True, by_label=True)
 
     args = parser.parse_args()
@@ -24,8 +25,6 @@ if __name__ == "__main__":
     # Base directory for model evaluations
     model_dirs = f'logs/machamp/{evaluator.dataset}/{evaluator.encoder}/{evaluator.encoding}/'
     gold_data = f'data/{evaluator.dataset}/test.data'
-
-
 
     for seed in evaluator.seeds:
         print(f"🔍 Evaluating seed: {seed}")
@@ -52,15 +51,15 @@ if __name__ == "__main__":
         seed_results["overall"] = evaluator.calculate_metrics(gold_data, pred_data)
 
         # Calculate metrics by depth if requested
-        #if args.by_depth:
-        #    print(f"📊 Calculating metrics by depth for seed {seed}...")
-        #    seed_results["by_depth"] = evaluator.calculate_metrics_by_depth(gold_data, pred_data)
+        if args.by_depth:
+            print(f"📊 Calculating metrics by depth for seed {seed}...")
+            seed_results["by_depth"] = evaluator.calculate_metrics_by_depth(gold_data, pred_data)
 
         # Calculate metrics by label if requested
         if args.by_label:
             print(f"🏷️ Calculating metrics by label for seed {seed}...")
             seed_results["by_label"] = evaluator.calculate_metrics_by_label(gold_data, pred_data)
-
+            
         # Add the consolidated results to our list
         all_results.append(seed_results)
 
