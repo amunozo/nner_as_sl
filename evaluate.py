@@ -9,6 +9,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Evaluate a Machamp model (caio evaluator only)")
     parser.add_argument('--encoder', type=str, required=True, help="Name of the encoder used from HF")
     parser.add_argument('--encoding', type=str, required=True, help="Constituency encoding")
+    parser.add_argument('--predict', type=str, default=True, help="Whether to predict or not")
     parser.add_argument('--dataset', type=str, required=True, help="Name of the dataset to evaluate on")
     parser.add_argument('--device', type=str, default='0', help="Device to run the evaluation on")
 
@@ -24,9 +25,16 @@ if __name__ == "__main__":
     for seed in evaluator.seeds:
         print(f"🔍 Evaluating seed: {seed}")
         
-        predicted_labels = evaluator.predict(seed)
-        predicted_labels = add_bos_eos(predicted_labels)
+        if args.predict:
+            predicted_labels = evaluator.predict(seed)
+            predicted_labels = add_bos_eos(predicted_labels)
+        else:
+            predicted_labels = f'{model_dirs}seed_{seed}/output.labels'
+            if not os.path.exists(predicted_labels):
+                print(f"❌ Prediction file not found for seed {seed}. Skipping...")
+                continue
 
+        # Decode the predicted labels
         pred_trees = decode(args.encoding, predicted_labels, predicted_labels.replace('labels', 'trees'))
         pred_data = trees_to_data(pred_trees, pred_trees.replace('trees', 'data'))
 
