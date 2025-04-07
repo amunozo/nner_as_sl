@@ -64,6 +64,30 @@ class Evaluator:
             "f1": self.f1()
         }
 
+    def calculate_metrics_by_label(self, gold_data: List, predicted_data: List) -> Dict[str, Dict[str, float]]:
+        gold_entities = find_entities(gold_data)
+        predicted_entities = find_entities(predicted_data)
+
+        labels = set()
+        for sentence in gold_entities:
+            for entity in sentence:
+                labels.add(entity[0])
+
+        results = {label: {} for label in labels}
+
+        for label in labels:
+            self.reset()
+            for gold, pred in zip(gold_entities, predicted_entities):
+                gold_label = {e for e in gold if e[0] == label}
+                pred_label = {e for e in pred if e[0] == label}
+                self(gold_label, pred_label)
+
+            results[label]["precision"] = self.precision()
+            results[label]["recall"] = self.recall()
+            results[label]["f1"] = self.f1()
+            
+        return results
+
     def predict(self, seed: str) -> str:
         if not all([self.encoder, self.dataset, self.encoding]):
             raise ValueError("Model parameters not configured for prediction")

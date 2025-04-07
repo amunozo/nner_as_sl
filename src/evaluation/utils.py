@@ -2,21 +2,38 @@ from collections import defaultdict
 
 
 def average_dictionary(data_list):
-    result = defaultdict(lambda: defaultdict(float))
+    result = {
+        "overall": defaultdict(float),
+        "by_label": defaultdict(lambda: defaultdict(float))
+    }
     count = len(data_list)
 
+    # Sum up all values
     for data in data_list:
-        for outer_key, inner_value in data.items():
-            if isinstance(inner_value, dict):
-                for key, value in inner_value.items():
-                    if isinstance(value, (int, float)):
-                        result[outer_key][key] += value
-            elif isinstance(inner_value, (int, float)):
-                result["__flat__"][outer_key] += inner_value
+        # Handle overall metrics
+        for metric, value in data["overall"].items():
+            result["overall"][metric] += value
+        
+        # Handle by_label metrics
+        for label, metrics in data["by_label"].items():
+            for metric, value in metrics.items():
+                result["by_label"][label][metric] += value
 
-    # Divide by count
-    for outer_key, inner_dict in result.items():
-        for key in inner_dict:
-            result[outer_key][key] /= count
+    # Calculate averages
+    # Average overall metrics
+    for metric in result["overall"]:
+        result["overall"][metric] /= count
+    
+    # Average by_label metrics
+    for label in result["by_label"]:
+        for metric in result["by_label"][label]:
+            result["by_label"][label][metric] /= count
 
-    return {outer_key: dict(inner_dict) for outer_key, inner_dict in result.items()}
+    # Convert defaultdicts to regular dicts
+    return {
+        "overall": dict(result["overall"]),
+        "by_label": {
+            label: dict(metrics) 
+            for label, metrics in result["by_label"].items()
+        }
+    }
