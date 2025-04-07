@@ -9,9 +9,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Evaluate a Machamp model (caio evaluator only)")
     parser.add_argument('--encoder', type=str, required=True, help="Name of the encoder used from HF")
     parser.add_argument('--encoding', type=str, required=True, help="Constituency encoding")
-    parser.add_argument('--predict', type=str, default=True, help="Whether to predict or not")
     parser.add_argument('--dataset', type=str, required=True, help="Name of the dataset to evaluate on")
     parser.add_argument('--device', type=str, default='0', help="Device to run the evaluation on")
+    parser.add_argument('--predict', action='store_true', help="Whether to predict (default: False)")
+    parser.add_argument('--no-predict', dest='predict', action='store_false', help="Whether to use existing predictions")
+    parser.set_defaults(predict=True)
 
     args = parser.parse_args()
 
@@ -22,10 +24,13 @@ if __name__ == "__main__":
     model_dirs = f'logs/machamp/{evaluator.dataset}/{evaluator.encoder}/{evaluator.encoding}/'
     gold_data = f'data/{evaluator.dataset}/test.data'
 
+
+
     for seed in evaluator.seeds:
         print(f"🔍 Evaluating seed: {seed}")
         
         if args.predict:
+            print(args.predict)
             predicted_labels = evaluator.predict(seed)
             predicted_labels = add_bos_eos(predicted_labels)
         else:
