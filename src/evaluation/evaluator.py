@@ -61,7 +61,10 @@ class Evaluator:
         return {
             "precision": self.precision(),
             "recall": self.recall(),
-            "f1": self.f1()
+            "f1": self.f1(),
+            "n_pred": self.n_pred,
+            "n_gold": self.n_gold,
+            "n_correct": self.n_correct
         }
 
     def calculate_metrics_by_label(self, gold_data: List, predicted_data: List) -> Dict[str, Dict[str, float]]:
@@ -85,7 +88,10 @@ class Evaluator:
             results[label]["precision"] = self.precision()
             results[label]["recall"] = self.recall()
             results[label]["f1"] = self.f1()
-            
+            results[label]["n_pred"] = self.n_correct
+            results[label]["n_gold"] = self.n_gold
+            results[label]["n_correct"] = self.n_correct
+
         return results
 
     def predict(self, seed: str) -> str:
