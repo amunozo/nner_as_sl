@@ -42,34 +42,21 @@ if __name__ == "__main__":
         # Decode the predicted labels
         pred_trees = decode(args.encoding, predicted_labels, predicted_labels.replace('labels', 'trees'))
         pred_data = trees_to_data(pred_trees, pred_trees.replace('trees', 'data'))
-
-        # Create a dictionary to store all results for this seed
         seed_results = {}
-        
-        # Calculate standard metrics
-        print(f"📊 Calculating standard metrics for seed {seed}...")
+        # Calculate metrics
         seed_results["overall"] = evaluator.calculate_metrics(gold_data, pred_data)
-
-        # Calculate metrics by depth if requested
         if args.by_depth:
-            print(f"📊 Calculating metrics by depth for seed {seed}...")
             seed_results["by_depth"] = evaluator.calculate_metrics_by_depth(gold_data, pred_data)
-
-        # Calculate metrics by label if requested
         if args.by_label:
-            print(f"🏷️ Calculating metrics by label for seed {seed}...")
             seed_results["by_label"] = evaluator.calculate_metrics_by_label(gold_data, pred_data)
             
-        # Add the consolidated results to our list
         all_results.append(seed_results)
 
-        # Save individual seed result in proper format
         seed_dir = os.path.join(model_dirs, f"seed_{seed}")
         os.makedirs(seed_dir, exist_ok=True)
         with open(os.path.join(seed_dir, "results.json"), "w") as f:
             json.dump(seed_results, f, indent=2)
 
-    # Compute average across all seeds
     avg_results = average_dictionary(all_results)
 
     # Save averaged results in the base model directory
