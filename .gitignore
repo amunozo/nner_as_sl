@@ -8,3 +8,4 @@ logs/
 notebooks/
 *.sh
 machamp
+scripts/create_job.py
