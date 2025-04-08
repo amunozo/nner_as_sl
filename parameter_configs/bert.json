@@ -57,6 +57,7 @@
         },
         "training": {
           "keep_top_n": 1,
+          "only_save_best_model": true,
           "learning_rate_scheduler": {
             "cut_frac": 0.3,
             "decay_factor": 0.38,
