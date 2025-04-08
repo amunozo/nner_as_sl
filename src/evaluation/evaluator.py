@@ -127,7 +127,7 @@ class Evaluator:
             results[label]["precision"] = self.precision()
             results[label]["recall"] = self.recall()
             results[label]["f1"] = self.f1()
-            results[label]["n_pred"] = self.n_correct
+            results[label]["n_pred"] = self.n_pred
             results[label]["n_gold"] = self.n_gold
             results[label]["n_correct"] = self.n_correct
 
