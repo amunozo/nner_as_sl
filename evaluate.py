@@ -30,7 +30,6 @@ if __name__ == "__main__":
         print(f"🔍 Evaluating seed: {seed}")
         
         if args.predict:
-            print(args.predict)
             predicted_labels = evaluator.predict(seed)
             predicted_labels = add_bos_eos(predicted_labels)
         else:
