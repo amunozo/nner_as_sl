@@ -11,3 +11,4 @@ machamp
 create_job.py
 *.e
 *.o
+*.csv
