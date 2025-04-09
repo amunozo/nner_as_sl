@@ -21,6 +21,7 @@ parser.add_argument('--encoder', help="Encoder model from HuggingFace.", require
 parser.add_argument('--encoding', help="Sequence labeling encoding", 
                     choices=['ABS', 'REL', 'JUX', 'DYN'], required=True)
 parser.add_argument('--device', default=0, type=int)
+parser.add_argument('--num_epochs', help="Number of epochs for the experiment", default=30)
 parser.add_argument('--n_seeds',
                     help="Number of random initializations for the experiment", 
                     default=1)
@@ -53,7 +54,8 @@ if not os.path.exists(f'data/{args.dataset}/{args.encoding}/train.labels'):
         print(f'{split}.labels file created.')
 
 for seed in range(int(args.n_seeds)):
-    config_creator = ConfigCreator(args.dataset, args.encoder,args.encoding, 
+    config_creator = ConfigCreator(args.dataset, args.encoder, 
+                                   args.encoding, args.num_epochs,
                                    seed, template_dir='parameter_configs')
     model_dir = f'logs/machamp/{args.dataset}/{encoder_name}/{args.encoding}/seed_{seed}'
     dataset_config = config_creator.create_dataset_config()

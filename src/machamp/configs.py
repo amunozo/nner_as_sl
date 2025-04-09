@@ -2,7 +2,7 @@ import json
 import os
 
 class ConfigCreator:
-    def __init__(self, dataset, encoder, encoding, seed, template_dir='parameter_configs'):
+    def __init__(self, dataset, encoder, encoding, seed, num_epochs, template_dir='parameter_configs'):
         """
         Initialize the ConfigCreator with dataset, encoder, encoding, seed, and optional template directory.
         """
@@ -10,6 +10,7 @@ class ConfigCreator:
         self.encoder = encoder
         self.encoding = encoding
         self.seed = seed
+        self.num_epochs = num_epochs
         self.template_dir = template_dir
         self.encoder_name = encoder.split('/')[-1]
         self.model_dir = f'logs/machamp/{dataset}/{self.encoder_name}/{encoding}/seed_{seed}'
@@ -33,6 +34,7 @@ class ConfigCreator:
 
         parameters_config["transformer_model"] = self.encoder
         parameters_config["random_seed"] = self.seed
+        parameters_config["num_epochs"] = self.num_epochs
         
         config_path = f'{self.model_dir}/params-config.json'
         with open(config_path, 'w') as f:
