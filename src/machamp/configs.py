@@ -34,7 +34,7 @@ class ConfigCreator:
 
         parameters_config["transformer_model"] = self.encoder
         parameters_config["random_seed"] = self.seed
-        parameters_config["num_epochs"] = self.num_epochs
+        parameters_config["num_epochs"] = int(self.num_epochs)
         
         config_path = f'{self.model_dir}/params-config.json'
         with open(config_path, 'w') as f:
