@@ -21,7 +21,7 @@ def calculate_depth(tree):
     return max_depth
 
 def main():
-    base_dir = 'clean_data'
+    base_dir = 'data'
     subdirs = ['ace2004', 'ace2005', 'genia', 'nne']
     csv_file = 'tree_depth_statistics.csv'
     headers = ['Folder', 'File', 'Total Trees', 'Min Depth', 'Max Depth', 'Average Depth', 'Median Depth']
