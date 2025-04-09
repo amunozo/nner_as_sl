@@ -9,3 +9,5 @@ notebooks/
 *.sh
 machamp
 create_job.py
+*.e
+*.o
