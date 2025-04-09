@@ -2,7 +2,7 @@ import json
 import os
 
 class ConfigCreator:
-    def __init__(self, dataset, encoder, encoding, seed, num_epochs, template_dir='parameter_configs'):
+    def __init__(self, dataset, encoder, encoding, num_epochs, seed, template_dir='parameter_configs'):
         """
         Initialize the ConfigCreator with dataset, encoder, encoding, seed, and optional template directory.
         """
@@ -34,7 +34,7 @@ class ConfigCreator:
 
         parameters_config["transformer_model"] = self.encoder
         parameters_config["random_seed"] = self.seed
-        parameters_config["num_epochs"] = int(self.num_epochs)
+        parameters_config["training"]["num_epochs"] = int(self.num_epochs)
         
         config_path = f'{self.model_dir}/params-config.json'
         with open(config_path, 'w') as f:
