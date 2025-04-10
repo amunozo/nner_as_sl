@@ -1,8 +1,8 @@
-transformers
-torch
+torch==2.4.0
 networkx==3.3
 uniplot==0.13
 stanza==1.8.2
+transformers
 nltk
 jsonnet
 sentencepiece
