@@ -74,7 +74,7 @@ for seed in range(int(args.n_seeds)):
             
             os.system(f'python machamp/train.py --dataset_configs {dataset_config} \
                     --device {args.device} --parameters_config {parameter_config} \
-                    --seed {seed} --model_dir {model_dir} --resume {model_dir}')
+                    --seed {seed} --resume {model_dir}')
             continue
     else:
         config_creator = ConfigCreator(args.dataset, args.encoder, 
