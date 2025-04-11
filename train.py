@@ -60,22 +60,19 @@ for seed in range(int(args.n_seeds)):
     if os.path.exists(model_dir):
         if os.path.exists(f'{model_dir}/model.pt'):
             print(f"Seed {seed} already has a completed model. Skipping...")
-            continue
         
-        # If the directory exists but no completed model, check for checkpoints
-        checkpoints = [f for f in os.listdir(model_dir) if f.startswith('train_state_epoch_') and f.endswith('.pt')]
-        if checkpoints:
-            print(f"Found checkpoint(s) for seed {seed}. Will resume training...")
+        else: # TODO: properly resume the training of a particular seed, using the last checkpoint
+            print(f"Seed {seed} has an incomplete model. Resuming training...")
             config_creator = ConfigCreator(args.dataset, args.encoder, 
-                                        args.encoding, args.num_epochs,
-                                        seed, template_dir='parameter_configs')
+                                args.encoding, args.num_epochs,
+                                seed, template_dir='parameter_configs')
             dataset_config = config_creator.create_dataset_config()
             parameter_config = config_creator.create_parameters_config()
-            
+
             os.system(f'python machamp/train.py --dataset_configs {dataset_config} \
                     --device {args.device} --parameters_config {parameter_config} \
-                    --seed {seed} --resume {model_dir}')
-            continue
+                    --seed {seed} --model_dir {model_dir}')
+        
     else:
         config_creator = ConfigCreator(args.dataset, args.encoder, 
                                 args.encoding, args.num_epochs,
