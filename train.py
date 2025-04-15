@@ -25,6 +25,7 @@ parser.add_argument('--num_epochs', help="Number of epochs for the experiment", 
 parser.add_argument('--n_seeds',
                     help="Number of random initializations for the experiment", 
                     default=1)
+parser.add_argument('--time', action='store_true', default=False, help='Measure and print training time for each seed')
 
 args = parser.parse_args()
 
@@ -55,6 +56,9 @@ if not os.path.exists(f'data/{args.dataset}/{args.encoding}/train.labels'):
 
 for seed in range(int(args.n_seeds)):
     model_dir = f'logs/machamp/{args.dataset}/{encoder_name}/{args.encoding}/seed_{seed}'
+    if args.time:
+        import time
+        start_time = time.time()
     
     # Check if directory exists and has a completed model
     if os.path.exists(model_dir):
@@ -83,3 +87,7 @@ for seed in range(int(args.n_seeds)):
         os.system(f'python machamp/train.py --dataset_configs {dataset_config} \
                 --device {args.device} --parameters_config {parameter_config} \
                 --seed {seed} --model_dir {model_dir}')
+    
+    if args.time:
+        elapsed = time.time() - start_time
+        print(f"[Timing] Training for seed {seed} took {elapsed:.2f} seconds.")
