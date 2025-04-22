@@ -73,34 +73,42 @@ class Evaluator:
         gold_entities = find_entities(gold_data)
         predicted_entities = find_entities(predicted_data)
 
-        # Calculate depths ONLY from gold data
+        # Calculate depths from BOTH gold and predicted data
         all_depths = set()
         gold_depths_by_sentence = []
-        for gold in gold_entities:
+        pred_depths_by_sentence = []
+        
+        for gold, pred in zip(gold_entities, predicted_entities):
             gold_depths = self.calculate_nesting_depth(gold)
+            pred_depths = self.calculate_nesting_depth(pred)
             gold_depths_by_sentence.append(gold_depths)
+            pred_depths_by_sentence.append(pred_depths)
             all_depths.update(gold_depths.values())
 
         results = {depth: {} for depth in all_depths}
-        
+
         for depth in all_depths:
             self.reset()
-            
-            for gold, pred, gold_depths in zip(gold_entities, predicted_entities, gold_depths_by_sentence):
-                # Gold entities at this depth
+            for gold, pred, gold_depths, pred_depths in zip(gold_entities, predicted_entities, gold_depths_by_sentence, pred_depths_by_sentence):
                 gold_at_depth = {e for e in gold if gold_depths.get(e, 0) == depth}
-                pred_at_depth = {e for e in pred if gold_depths.get(e, 0) == depth}
-                
-                # Find all predictions that match any gold entity at this depth
-                correct_at_depth = gold_at_depth.intersection(pred)
-                
+                pred_at_depth = {e for e in pred if pred_depths.get(e, 0) == depth}
+                correct_for_precision = pred_at_depth.intersection(gold_at_depth)
+
                 self.n_gold += len(gold_at_depth)
-                self.n_correct += len(correct_at_depth)
                 self.n_pred += len(pred_at_depth)
-            
-            results[depth]["precision"] = self.precision()
-            results[depth]["recall"] = self.recall()
-            results[depth]["f1"] = self.f1()
+                self.n_correct += len(correct_for_precision)
+
+            # For recall, override n_correct for recall calculation
+            n_correct_recall = 0
+            for gold, pred, gold_depths in zip(gold_entities, predicted_entities, gold_depths_by_sentence):
+                gold_at_depth = {e for e in gold if gold_depths.get(e, 0) == depth}
+                n_correct_recall += len(gold_at_depth.intersection(pred))
+
+            recall = 0 if self.n_gold == 0 else n_correct_recall / self.n_gold
+            precision = self.precision()
+
+            results[depth]["precision"] = precision
+            results[depth]["recall"] = recall
             results[depth]["n_pred"] = self.n_pred
             results[depth]["n_gold"] = self.n_gold
             results[depth]["n_correct"] = self.n_correct
