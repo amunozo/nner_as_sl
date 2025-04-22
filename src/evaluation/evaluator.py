@@ -69,33 +69,34 @@ class Evaluator:
 
         return results
 
-    def calculate_metrics_by_depth(self, gold_data: List, predicted_data: List) -> Dict[str, Dict[str, float]]:
+    def calculate_metrics_by_depth(self, gold_data, predicted_data):
         gold_entities = find_entities(gold_data)
         predicted_entities = find_entities(predicted_data)
 
-        # Get all depths from gold and predicted entities
+        # Calculate depths ONLY from gold data
         all_depths = set()
-        for gold, pred in zip(gold_entities, predicted_entities):
+        gold_depths_by_sentence = []
+        for gold in gold_entities:
             gold_depths = self.calculate_nesting_depth(gold)
-            pred_depths = self.calculate_nesting_depth(pred)
+            gold_depths_by_sentence.append(gold_depths)
             all_depths.update(gold_depths.values())
-            all_depths.update(pred_depths.values())
 
-        # Initialize results dictionary with one entry per depth
         results = {depth: {} for depth in all_depths}
         
-        # Calculate metrics for each depth
         for depth in all_depths:
             self.reset()
             
-            for gold, pred in zip(gold_entities, predicted_entities):
-                gold_depths = self.calculate_nesting_depth(gold)
-                pred_depths = self.calculate_nesting_depth(pred)
+            for gold, pred, gold_depths in zip(gold_entities, predicted_entities, gold_depths_by_sentence):
+                # Gold entities at this depth
+                gold_at_depth = {e for e in gold if gold_depths.get(e, 0) == depth}
+                pred_at_depth = {e for e in pred if gold_depths.get(e, 0) == depth}
                 
-                gold_entities_at_depth = {e for e in gold if gold_depths.get(e, 0) == depth}
-                pred_entities_at_depth = {e for e in pred if pred_depths.get(e, 0) == depth}
+                # Find all predictions that match any gold entity at this depth
+                correct_at_depth = gold_at_depth.intersection(pred)
                 
-                self(gold_entities_at_depth, pred_entities_at_depth)
+                self.n_gold += len(gold_at_depth)
+                self.n_correct += len(correct_at_depth)
+                self.n_pred += len(pred_at_depth)
             
             results[depth]["precision"] = self.precision()
             results[depth]["recall"] = self.recall()
