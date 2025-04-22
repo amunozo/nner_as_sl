@@ -16,7 +16,8 @@ if __name__ == "__main__":
     parser.add_argument('--no-predict', dest='predict', action='store_false', help="Whether to use existing predictions")
     parser.add_argument('--by-label', action='store_true', help="Evaluate metrics by label")
     parser.add_argument('--by-depth', action='store_true', help="Evaluate metrics by depth")
-    parser.set_defaults(predict=True, by_depth=True, by_label=True)
+    parser.add_argument('--by-length', action='store_true', help="Evaluate metrics by entity length")
+    parser.set_defaults(predict=True, by_depth=True, by_label=True, by_length=True)
 
     args = parser.parse_args()
 
@@ -87,13 +88,14 @@ if __name__ == "__main__":
         time_dict['num_sentences'] = num_sentences
         time_dict['num_tokens'] = num_tokens
         time_dict['total'] = time.time() - total_start
-        # Removed per_sentence, sentences_per_second, tokens_per_second calculations
 
         seed_results = {}
         # Calculate metrics
         seed_results["overall"] = evaluator.calculate_metrics(gold_data, pred_data)
         if args.by_depth:
             seed_results["by_depth"] = evaluator.calculate_metrics_by_depth(gold_data, pred_data)
+        if args.by_length:
+            seed_results["by_length"] = evaluator.calculate_metrics_by_length(gold_data, pred_data)
         if args.by_label:
             seed_results["by_label"] = evaluator.calculate_metrics_by_label(gold_data, pred_data)
 

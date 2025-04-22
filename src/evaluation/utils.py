@@ -5,7 +5,8 @@ def average_dictionary(data_list):
     result = {
         "overall": defaultdict(float),
         "by_label": defaultdict(lambda: defaultdict(float)),
-        "by_depth": defaultdict(lambda: defaultdict(float))
+        "by_depth": defaultdict(lambda: defaultdict(float)),
+        "by_length": defaultdict(lambda: defaultdict(float)),  # <-- Add this line
     }
     count = len(data_list)
 
@@ -27,20 +28,27 @@ def average_dictionary(data_list):
                 for metric, value in metrics.items():
                     result["by_depth"][depth][metric] += value
 
+        # Handle by_length metrics
+        if "by_length" in data:
+            for length, metrics in data["by_length"].items():
+                for metric, value in metrics.items():
+                    result["by_length"][length][metric] += value
+
     # Calculate averages
-    # Average overall metrics
     for metric in result["overall"]:
         result["overall"][metric] /= count
     
-    # Average by_label metrics
     for label in result["by_label"]:
         for metric in result["by_label"][label]:
             result["by_label"][label][metric] /= count
     
-    # Average by_depth metrics
     for depth in result["by_depth"]:
         for metric in result["by_depth"][depth]:
             result["by_depth"][depth][metric] /= count
+
+    for length in result["by_length"]:
+        for metric in result["by_length"][length]:
+            result["by_length"][length][metric] /= count
 
     # Convert defaultdicts to regular dicts
     return {
@@ -52,5 +60,9 @@ def average_dictionary(data_list):
         "by_depth": {
             depth: dict(metrics)
             for depth, metrics in result["by_depth"].items()
+        },
+        "by_length": {
+            length: dict(metrics)
+            for length, metrics in result["by_length"].items()
         }
     }

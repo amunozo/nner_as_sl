@@ -68,6 +68,32 @@ class Evaluator:
         results["n_correct"] = self.n_correct
 
         return results
+    
+    def calculate_metrics_by_length(self, gold_data, predicted_data):
+        gold_entities = find_entities(gold_data)
+        predicted_entities = find_entities(predicted_data)
+        lengths = set()
+        for sentence in gold_entities:
+            for entity in sentence:
+                lengths.add(entity[2] - entity[1])
+        
+        results = {length: {} for length in lengths}
+
+        for length in lengths:
+            self.reset()
+            for gold, pred in zip(gold_entities, predicted_entities):
+                gold_by_length = {e for e in gold if e[2] - e[1] == length}
+                pred_by_length = {e for e in pred if e[2] - e[1] == length}
+                self(gold_by_length, pred_by_length)
+
+            results[length]["precision"] = self.precision()
+            results[length]["recall"] = self.recall()
+            results[length]["f1"] = self.f1()
+            results[length]["n_pred"] = self.n_pred
+            results[length]["n_gold"] = self.n_gold
+            results[length]["n_correct"] = self.n_correct
+        
+        return results
 
     def calculate_metrics_by_depth(self, gold_data, predicted_data):
         gold_entities = find_entities(gold_data)
