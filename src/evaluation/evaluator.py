@@ -75,7 +75,7 @@ class Evaluator:
         lengths = set()
         for sentence in gold_entities:
             for entity in sentence:
-                lengths.add(entity[2] - entity[1])
+                lengths.add(entity[2] - entity[1] + 1)
         
         results = {length: {} for length in lengths}
 
