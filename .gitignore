@@ -13,3 +13,4 @@ create_job.py
 *.o
 *.csv
 *.ipynb
+CoDeLin/
