@@ -128,22 +128,31 @@ class Evaluator:
                 self.n_pred += len(pred_at_depth)
                 self.n_correct += len(correct_for_precision)
 
-            # For recall, override n_correct for recall calculation
+            # Save the current correct count for FP calculation
+            n_correct_precision = self.n_correct
+            n_gold = self.n_gold
+            n_pred = self.n_pred
+
+            # For recall, calculate n_correct differently
             n_correct_recall = 0
             for gold, pred, gold_depths in zip(gold_entities, predicted_entities, gold_depths_by_sentence):
                 gold_at_depth = {e for e in gold if gold_depths.get(e, 0) == depth}
                 n_correct_recall += len(gold_at_depth.intersection(pred))
 
-            recall = 0 if self.n_gold == 0 else n_correct_recall / self.n_gold
-            precision = self.precision()
+            recall = 0 if n_gold == 0 else n_correct_recall / n_gold
+            precision = 0 if n_pred == 0 else n_correct_precision / n_pred
+
+            # Calculate FP and FN using the same correct count used for precision
+            fp = n_pred - n_correct_precision
+            fn = n_gold - n_correct_precision
 
             results[depth]["precision"] = precision
             results[depth]["recall"] = recall
-            results[depth]["n_pred"] = self.n_pred
-            results[depth]["n_gold"] = self.n_gold
-            results[depth]["n_correct"] = self.n_correct
-            results[depth]["fp"] = self.n_pred - self.n_correct
-            results[depth]["fn"] = self.n_gold - self.n_correct
+            results[depth]["n_pred"] = n_pred
+            results[depth]["n_gold"] = n_gold
+            results[depth]["n_correct"] = n_correct_precision
+            results[depth]["fp"] = fp
+            results[depth]["fn"] = fn
 
         return results
         
