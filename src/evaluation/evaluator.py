@@ -66,6 +66,8 @@ class Evaluator:
         results["n_pred"] = self.n_pred
         results["n_gold"] = self.n_gold
         results["n_correct"] = self.n_correct
+        results["fp"] = self.n_pred - self.n_correct
+        results["fn"] = self.n_gold - self.n_correct
 
         return results
     
@@ -92,7 +94,9 @@ class Evaluator:
             results[length]["n_pred"] = self.n_pred
             results[length]["n_gold"] = self.n_gold
             results[length]["n_correct"] = self.n_correct
-        
+            results[length]["fp"] = self.n_pred - self.n_correct
+            results[length]["fn"] = self.n_gold - self.n_correct
+
         return results
 
     def calculate_metrics_by_depth(self, gold_data, predicted_data):
@@ -138,6 +142,8 @@ class Evaluator:
             results[depth]["n_pred"] = self.n_pred
             results[depth]["n_gold"] = self.n_gold
             results[depth]["n_correct"] = self.n_correct
+            results[depth]["fp"] = self.n_pred - self.n_correct
+            results[depth]["fn"] = self.n_gold - self.n_correct
 
         return results
         
