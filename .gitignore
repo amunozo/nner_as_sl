@@ -12,5 +12,6 @@ create_job.py
 *.e
 *.o
 *.csv
+results/
 *.ipynb
 CoDeLin/
