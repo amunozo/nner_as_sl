@@ -56,10 +56,16 @@ def max_possible_recall(filename, encoding):
     
     n_correct = 0
     n_gold = 0
+    id = 0
     
     for gold, pred in zip(gold_entities, predicted_entities):
+        id += 1
         n_correct += len(gold.intersection(pred))
         n_gold += len(gold)
+        missed_entities = gold - gold.intersection(pred)
+        if missed_entities:
+            print(f"Missed entities for sentence {id}: {missed_entities}")
+            print(f"Missed entities: {missed_entities}")
     
     # Return max possible recall as a percentage
     max_recall = 0 if n_gold == 0 else (n_correct / n_gold)
@@ -107,7 +113,7 @@ if __name__ == "__main__":
     
     # Example usage
     datasets = ["ace2004", "ace2005", "nne", "genia"]
-    encodings = ["ABS", "REL", "DYN"]
+    encodings = ["ABS"] #, "REL", "DYN"]
     
     # Store all results for CSV
     all_results = []
