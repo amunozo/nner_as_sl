@@ -19,7 +19,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--dataset", help="NNER dataset", required=True)
 parser.add_argument('--encoder', help="Encoder model from HuggingFace.", required=True)
 parser.add_argument('--encoding', help="Sequence labeling encoding", 
-                    choices=['ABS', 'REL', 'JUX', 'DYN'], required=True)
+                    choices=['ABS', 'REL', 'JUX', 'DYN', '4EC'], required=True)
 parser.add_argument('--device', default=0, type=int)
 parser.add_argument('--num_epochs', help="Number of epochs for the experiment", default=30)
 parser.add_argument('--n_seeds',
