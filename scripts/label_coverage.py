@@ -113,7 +113,7 @@ if __name__ == "__main__":
     
     # Example usage
     datasets = ["ace2004", "ace2005", "nne", "genia"]
-    encodings = ["ABS"] #, "REL", "DYN"]
+    encodings = ["ABS", "REL", "DYN", "4EC"]
     
     # Store all results for CSV
     all_results = []
