@@ -252,7 +252,7 @@ def encode(encoding, trees_file, labels_file, multitask=True):
     else:
         mt = ''
     codelin_script = f'python CoDeLin/main.py CONST ENC {encoding} {trees_file} {labels_file}  \
-        --sep [_] --ujoiner [+] {mt} --ignore_postag' #separator not present in labels
+        --sep [_] --ujoiner [+] {mt} --b_marker [b] --ignore_postag' #separator not present in labels
     
     os.system(codelin_script)
     
@@ -268,7 +268,7 @@ def decode(encoding, labels_file, trees_file, multitask=True):
         mt = ''
 
     decoding_script =  f'python CoDeLin/main.py CONST DEC {encoding} {labels_file} {trees_file} \
-        --sep [_] --ujoiner [+] {mt}'
+        --sep [_] --ujoiner [+] --b_marker [b] {mt}'
 
     os.system(decoding_script)
 
