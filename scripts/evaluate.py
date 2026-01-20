@@ -5,6 +5,10 @@ from src.data.utils import trees_to_data, decode, add_bos_eos
 import json
 import os
 import time
+import sys
+
+# Add the project root to the python path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Evaluate a Machamp model (caio evaluator only)")
@@ -30,7 +34,7 @@ if __name__ == "__main__":
     gold_data = f'data/{evaluator.dataset}/test.data'
 
     for seed in evaluator.seeds:
-        print(f"🔍 Evaluating seed: {seed}")
+        print(f"Evaluating seed: {seed}")
         time_dict = {}
         total_start = time.time()
         predict_end = predict_start = total_start # Initialize in case --no-predict and file missing
@@ -45,7 +49,7 @@ if __name__ == "__main__":
         else:
             predicted_labels = f'{model_dirs}seed_{seed}/output.labels'
             if not os.path.exists(predicted_labels):
-                print(f"❌ Prediction file not found for seed {seed}. Skipping...")
+                print(f"Prediction file not found for seed {seed}. Skipping...")
                 continue
             # If not predicting, set predict time to 0 or handle appropriately
             time_dict['predict'] = 0.0 # Or load from a previous run if available
@@ -66,7 +70,7 @@ if __name__ == "__main__":
                     num_sentences += 1
                     num_tokens += len(line.strip().split())
         except FileNotFoundError:
-             print(f"❌ Decoded data file not found: {pred_data}. Skipping timing calculation for this seed.")
+             print(f"Decoded data file not found: {pred_data}. Skipping timing calculation for this seed.")
              # Handle error appropriately, maybe skip this seed or set counts to 0
              num_sentences = 0
              num_tokens = 0
@@ -147,4 +151,4 @@ if __name__ == "__main__":
     with open(os.path.join(model_dirs, "avg_results.json"), "w") as f:
         json.dump(avg_results, f, indent=2)
 
-    print("✅ Done! Per-seed results and averaged results saved.")
+    print("Done! Per-seed results and averaged results saved.")

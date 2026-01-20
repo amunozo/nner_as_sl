@@ -1,18 +1,17 @@
-"""
-Train a pretrained multi-task learning model using MaChAmp. Datasets need to be already converted to
-linearized labels.
-"""
-
 import argparse
 import torch
 import os
+import sys
+
+# Add the project root to the python path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from src.machamp.configs import ConfigCreator
-import os
 from src.data.utils import to_parenthesized, remove_bos_eos, encode, remove_features
 from tqdm import tqdm
 
 
-machamp_training_script = 'machamp/train.py'
+machamp_training_script = os.path.join(os.path.dirname(__file__), '..', 'machamp', 'train.py')
 
 parser = argparse.ArgumentParser()
 
@@ -73,9 +72,9 @@ for seed in range(int(args.n_seeds)):
             dataset_config = config_creator.create_dataset_config()
             parameter_config = config_creator.create_parameters_config()
 
-            os.system(f'python machamp/train.py --dataset_configs {dataset_config} \
-                    --device {args.device} --parameters_config {parameter_config} \
-                    --seed {seed} --model_dir {model_dir}')
+        os.system(f'python {machamp_training_script} --dataset_configs {dataset_config} \
+                --device {args.device} --parameters_config {parameter_config} \
+                --seed {seed} --model_dir {model_dir}')
         
     else:
         config_creator = ConfigCreator(args.dataset, args.encoder, 
@@ -84,7 +83,7 @@ for seed in range(int(args.n_seeds)):
         dataset_config = config_creator.create_dataset_config()
         parameter_config = config_creator.create_parameters_config()
 
-        os.system(f'python machamp/train.py --dataset_configs {dataset_config} \
+        os.system(f'python {machamp_training_script} --dataset_configs {dataset_config} \
                 --device {args.device} --parameters_config {parameter_config} \
                 --seed {seed} --model_dir {model_dir}')
     
