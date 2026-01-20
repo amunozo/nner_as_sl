@@ -76,11 +76,6 @@ IL-2 gene expression and NF-kappa B activation through CD28 requires reactive ox
 0,1 G#DNA|4,5 G#protein|8,8 G#protein|14,14 G#protein
 ```
 
-## Contact
-
-For any questions or issues, please contact the author:
-**Alberto Muñoz-Ortiz** - [alberto.munoz.ortiz@udc.es](mailto:alberto.munoz.ortiz@udc.es)
-
 ## Citation
 
 If you use this code or our findings in your research, please cite:
@@ -106,6 +101,11 @@ If you use this code or our findings in your research, please cite:
     pages = "9993--10002",
 }
 ```
+
+## Contact
+
+For any questions or issues, please contact the main author:
+**Alberto Muñoz-Ortiz** - [alberto.munoz.ortiz@udc.es](mailto:alberto.munoz.ortiz@udc.es)
 
 ## Acknowledgments
 
