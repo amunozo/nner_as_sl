@@ -109,4 +109,11 @@ If you use this code or our findings in your research, please cite:
 
 ## Acknowledgments
 
-This work is based on the MaChAmp toolkit and uses various transformer models from HuggingFace.
+This work was funded by SCANNER-UDC (PID2020-113230RB-C21) funded by MICIU/AEI/10.13039/501100011033; Xunta de Galicia (ED431C 2024/02); GAP (PID2022-139308OA-I00) funded by MICIU/AEI/10.13039/501100011033/ and by ERDF, EU; Grant PRE2021-097001 funded by MICIU/AEI/10.13039/501100011033 and by ESF+ (predoctoral training grant associated to project PID2020-113230RB-C21); LATCHING (PID2023-147129OB-C21) funded by MICIU/AEI/10.13039/501100011033 and ERDF; TSI-100925-2023-1 funded
+by Ministry for Digital Transformation and Civil
+Service and “NextGenerationEU” PRTR; 
+and Centro de Investigación de Galicia ‘‘CITIC’’, funded by the Xunta de Galicia through the collaboration agreement between the Consellería de Cultura, Educación, Formación Profesional e Universidades and the Galician universities for the reinforcement of the research centres of the Galician University System (CIGUSA). 
+
+This research project was made possible through the access granted by the Galician Supercomputing Center (CESGA) to its supercomputing infrastructure. The supercomputer FinisTerrae III and its permanent data storage system have been funded by the NextGeneration EU 2021 Recovery, Transformation and Resilience Plan, ICT2021-006904, and also from the Pluriregional Operational Programme of Spain 2014-2020 of the European Regional Development Fund (ERDF), ICTS-2019-02-CESGA-3, and from the State Programme for the Promotion of Scientific and Technical Research of Excellence of the State Plan for Scientific and Technical Research and Innovation 2013-2016 State subprogramme for scientific and technical infrastructures and equipment of ERDF, CESG15-DE-3114.
+
+Caio Corro has received funding from the French Agence Nationale pour la Recherche under grant agreement InExtenso ANR-23-IAS1-0004 and SEMIAMOR ANR-23-CE23-0005.
