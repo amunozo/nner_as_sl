@@ -1,92 +1,147 @@
+#!/usr/bin/env python3
+"""Prepare encoded data and train MaChAmp models across random seeds."""
+
 import argparse
-import torch
-import os
+import subprocess
 import sys
-
-# Add the project root to the python path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-from src.machamp.configs import ConfigCreator
-from src.data.utils import to_parenthesized, remove_bos_eos, encode, remove_features
-from tqdm import tqdm
+import time
+from pathlib import Path
 
 
-machamp_training_script = os.path.join(os.path.dirname(__file__), '..', 'machamp', 'train.py')
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PROJECT_ROOT))
 
-parser = argparse.ArgumentParser()
+from src.data.utils import encode, remove_bos_eos, to_parenthesized  # noqa: E402
+from src.machamp.configs import ConfigCreator  # noqa: E402
 
-parser.add_argument("--dataset", help="NNER dataset", required=True)
-parser.add_argument('--encoder', help="Encoder model from HuggingFace.", required=True)
-parser.add_argument('--encoding', help="Sequence labeling encoding", 
-                    choices=['ABS', 'REL', 'JUX', 'DYN', '4EC'], required=True)
-parser.add_argument('--device', default=0, type=int)
-parser.add_argument('--num_epochs', help="Number of epochs for the experiment", default=30)
-parser.add_argument('--n_seeds',
-                    help="Number of random initializations for the experiment", 
-                    default=1)
-parser.add_argument('--time', action='store_true', default=False, help='Measure and print training time for each seed')
 
-args = parser.parse_args()
+ENCODINGS = ("ABS", "REL", "JUX", "DYN", "4EC")
 
-if args.device == None:
-    device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
-encoder_name = args.encoder.split('/')[-1]
-data_dir = f'data/{args.dataset}'
+def prepare_labels(dataset_dir, encoding, codelin_dir, force=False):
+    """Create CoDeLin label files for each available data split."""
+    encoded_dir = dataset_dir / encoding
+    encoded_dir.mkdir(parents=True, exist_ok=True)
+    for split in ("train", "dev", "test"):
+        data_file = dataset_dir / f"{split}.data"
+        if not data_file.is_file():
+            raise FileNotFoundError(f"Required data split not found: {data_file}")
+        tree_file = dataset_dir / f"{split}.trees"
+        label_file = encoded_dir / f"{split}.labels"
+        if label_file.is_file() and not force:
+            continue
+        to_parenthesized(data_file, tree_file)
+        encode(encoding, tree_file, label_file, codelin_dir=codelin_dir)
+        remove_bos_eos(label_file)
+        print(f"Prepared {label_file}")
 
-# create .label data if it does not exist
-if not os.path.exists(f'data/{args.dataset}/{args.encoding}/train.labels'):
-    for split in tqdm(['test', 'dev', 'train']):
-        to_parenthesized(
-            f'{data_dir}/{split}.data', 
-            f'{data_dir}/{split}.trees'
-            )
-        print(f'{split}.trees file created.')
-        input_file = f"{data_dir}/{split}.trees"
 
-        encoding_dir = f'{data_dir}/{args.encoding}'
-        if not os.path.exists(encoding_dir):
-            os.makedirs(encoding_dir)
-        
-        output_file = f"{encoding_dir}/{split}.labels"
-        encode(args.encoding, input_file, output_file)
-        remove_bos_eos(output_file)
-        print(f'{split}.labels file created.')
+def training_command(
+    machamp_script,
+    dataset_config,
+    parameter_config,
+    device,
+    seed,
+    model_dir,
+):
+    return [
+        sys.executable,
+        str(machamp_script),
+        "--dataset_configs",
+        str(dataset_config),
+        "--device",
+        str(device),
+        "--parameters_config",
+        str(parameter_config),
+        "--seed",
+        str(seed),
+        "--model_dir",
+        str(model_dir),
+    ]
 
-for seed in range(int(args.n_seeds)):
-    model_dir = f'logs/machamp/{args.dataset}/{encoder_name}/{args.encoding}/seed_{seed}'
-    if args.time:
-        import time
-        start_time = time.time()
-    
-    # Check if directory exists and has a completed model
-    if os.path.exists(model_dir):
-        if os.path.exists(f'{model_dir}/model.pt'):
-            print(f"Seed {seed} already has a completed model. Skipping...")
-        
-        else: # TODO: properly resume the training of a particular seed, using the last checkpoint
-            print(f"Seed {seed} has an incomplete model. Resuming training...")
-            config_creator = ConfigCreator(args.dataset, args.encoder, 
-                                args.encoding, args.num_epochs,
-                                seed, template_dir='parameter_configs')
-            dataset_config = config_creator.create_dataset_config()
-            parameter_config = config_creator.create_parameters_config()
 
-        os.system(f'python {machamp_training_script} --dataset_configs {dataset_config} \
-                --device {args.device} --parameters_config {parameter_config} \
-                --seed {seed} --model_dir {model_dir}')
-        
-    else:
-        config_creator = ConfigCreator(args.dataset, args.encoder, 
-                                args.encoding, args.num_epochs,
-                                seed, template_dir='parameter_configs')
-        dataset_config = config_creator.create_dataset_config()
-        parameter_config = config_creator.create_parameters_config()
+def build_parser():
+    parser = argparse.ArgumentParser(
+        description="Train nested NER sequence-labeling models with MaChAmp."
+    )
+    parser.add_argument("--dataset", required=True, help="dataset directory name")
+    parser.add_argument("--encoder", required=True, help="Hugging Face encoder ID")
+    parser.add_argument("--encoding", choices=ENCODINGS, required=True)
+    parser.add_argument("--device", default="0", help="MaChAmp device value")
+    parser.add_argument("--num-epochs", type=int, default=30)
+    parser.add_argument("--n-seeds", type=int, default=1)
+    parser.add_argument("--time", action="store_true", help="report time per seed")
+    parser.add_argument("--force-encode", action="store_true")
+    parser.add_argument("--data-dir", type=Path, default=PROJECT_ROOT / "data")
+    parser.add_argument("--logs-dir", type=Path, default=PROJECT_ROOT / "logs")
+    parser.add_argument(
+        "--template-dir",
+        type=Path,
+        default=PROJECT_ROOT / "parameter_configs",
+    )
+    parser.add_argument("--machamp-dir", type=Path, default=PROJECT_ROOT / "machamp")
+    parser.add_argument("--codelin-dir", type=Path, default=PROJECT_ROOT / "CoDeLin")
+    return parser
 
-        os.system(f'python {machamp_training_script} --dataset_configs {dataset_config} \
-                --device {args.device} --parameters_config {parameter_config} \
-                --seed {seed} --model_dir {model_dir}')
-    
-    if args.time:
-        elapsed = time.time() - start_time
-        print(f"[Timing] Training for seed {seed} took {elapsed:.2f} seconds.")
+
+def main(argv=None):
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if args.num_epochs <= 0:
+        parser.error("--num-epochs must be positive")
+    if args.n_seeds <= 0:
+        parser.error("--n-seeds must be positive")
+
+    machamp_script = args.machamp_dir / "train.py"
+    if not machamp_script.is_file():
+        parser.error(
+            f"MaChAmp entry point not found at {machamp_script}. "
+            "Run 'git submodule update --init --recursive'."
+        )
+    try:
+        prepare_labels(
+            args.data_dir / args.dataset,
+            args.encoding,
+            args.codelin_dir,
+            args.force_encode,
+        )
+    except (FileNotFoundError, ValueError) as error:
+        parser.error(str(error))
+
+    for seed in range(args.n_seeds):
+        creator = ConfigCreator(
+            args.dataset,
+            args.encoder,
+            args.encoding,
+            args.num_epochs,
+            seed,
+            template_dir=args.template_dir,
+            data_dir=args.data_dir,
+            logs_dir=args.logs_dir,
+        )
+        model_file = creator.model_dir / "model.pt"
+        if model_file.is_file():
+            print(f"Seed {seed} already has a completed model; skipping")
+            continue
+        if creator.model_dir.exists() and any(creator.model_dir.iterdir()):
+            print(f"Seed {seed} has incomplete output; starting MaChAmp in the same directory")
+
+        dataset_config = creator.create_dataset_config()
+        parameter_config = creator.create_parameters_config()
+        command = training_command(
+            machamp_script,
+            dataset_config,
+            parameter_config,
+            args.device,
+            seed,
+            creator.model_dir,
+        )
+        start = time.perf_counter()
+        subprocess.run(command, check=True, cwd=PROJECT_ROOT)
+        if args.time:
+            elapsed = time.perf_counter() - start
+            print(f"Training seed {seed} took {elapsed:.2f} seconds")
+
+
+if __name__ == "__main__":
+    main()

@@ -1,77 +1,69 @@
+"""Create per-run MaChAmp configuration files."""
+
 import json
-import os
+from pathlib import Path
+
 
 class ConfigCreator:
-    def __init__(self, dataset, encoder, encoding, num_epochs, seed, template_dir='parameter_configs'):
-        """
-        Initialize the ConfigCreator with dataset, encoder, encoding, seed, and optional template directory.
-        """
+    def __init__(
+        self,
+        dataset,
+        encoder,
+        encoding,
+        num_epochs,
+        seed,
+        template_dir="parameter_configs",
+        data_dir="data",
+        logs_dir="logs",
+    ):
         self.dataset = dataset
         self.encoder = encoder
         self.encoding = encoding
-        self.seed = seed
-        self.num_epochs = num_epochs
-        self.template_dir = template_dir
-        self.encoder_name = encoder.split('/')[-1]
-        self.model_dir = f'logs/machamp/{dataset}/{self.encoder_name}/{encoding}/seed_{seed}'
-        self._ensure_model_directory()
-
-    def _ensure_model_directory(self):
-        """
-        Ensure that the model directory exists.
-        """
-        if not os.path.exists(self.model_dir):
-            os.makedirs(self.model_dir)
+        self.seed = int(seed)
+        self.num_epochs = int(num_epochs)
+        self.template_dir = Path(template_dir)
+        self.data_dir = Path(data_dir)
+        self.logs_dir = Path(logs_dir)
+        self.encoder_name = Path(encoder).name
+        self.model_dir = (
+            self.logs_dir
+            / "machamp"
+            / dataset
+            / self.encoder_name
+            / encoding
+            / f"seed_{self.seed}"
+        )
+        self.model_dir.mkdir(parents=True, exist_ok=True)
 
     def create_parameters_config(self):
-        """
-        Create the parameters config for the MaChAmp model based on the BERT model template.
-        """
-        template_file = f'{self.template_dir}/bert.json'  # other models may need other templates
-        
-        with open(template_file, 'r') as f:
-            parameters_config = json.load(f)
-
-        parameters_config["transformer_model"] = self.encoder
-        parameters_config["random_seed"] = self.seed
-        parameters_config["training"]["num_epochs"] = int(self.num_epochs)
-        
-        config_path = f'{self.model_dir}/params-config.json'
-        with open(config_path, 'w') as f:
-            json.dump(parameters_config, f)
-        
-        return config_path
+        template_file = self.template_dir / "bert.json"
+        if not template_file.is_file():
+            raise FileNotFoundError(f"Parameter template not found: {template_file}")
+        parameters = json.loads(template_file.read_text(encoding="utf-8"))
+        parameters["transformer_model"] = self.encoder
+        parameters["random_seed"] = self.seed
+        parameters["training"]["num_epochs"] = self.num_epochs
+        config_path = self.model_dir / "params-config.json"
+        config_path.write_text(json.dumps(parameters, indent=2) + "\n", encoding="utf-8")
+        return str(config_path)
 
     def create_dataset_config(self):
-        """
-        Create the dataset config for the MaChAmp model.
-        """
+        encoded_dir = self.data_dir / self.dataset / self.encoding
         dataset_config = {
-            f"{self.dataset}": {
-                "train_data_path": f"data/{self.dataset}/{self.encoding}/train.labels",
-                "dev_data_path": f"data/{self.dataset}/{self.encoding}/dev.labels",
+            self.dataset: {
+                "train_data_path": str(encoded_dir / "train.labels"),
+                "dev_data_path": str(encoded_dir / "dev.labels"),
                 "word_idx": 0,
                 "tasks": {
-                    "ci": {
-                        "task_type": "seq",
-                        "column_idx": 2,
-                    },
-                    "ni": {
-                        "task_type": "seq",
-                        "column_idx": 3,
-                    },
-                    "ui": {
-                        "task_type": "seq",
-                        "column_idx": 4,
-                    },
-                }
+                    "ci": {"task_type": "seq", "column_idx": 2},
+                    "ni": {"task_type": "seq", "column_idx": 3},
+                    "ui": {"task_type": "seq", "column_idx": 4},
+                },
             }
         }
-        
-        config_path = f'{self.model_dir}/dataset-configs.json'
-        with open(config_path, 'w') as f:
-            json.dump(dataset_config, f)
-        
-        return config_path
-
-
+        config_path = self.model_dir / "dataset-configs.json"
+        config_path.write_text(
+            json.dumps(dataset_config, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        return str(config_path)

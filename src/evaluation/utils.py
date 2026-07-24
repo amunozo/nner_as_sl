@@ -1,107 +1,62 @@
-from collections import defaultdict
+"""Aggregation helpers for repeated evaluation runs."""
+
 import math
 
 
+SECTIONS = ("overall", "by_label", "by_depth", "by_length")
+
+
+def _summary(values, total_runs):
+    values = [float(value) for value in values]
+    values.extend([0.0] * (total_runs - len(values)))
+    mean = sum(values) / total_runs
+    variance = sum(value * value for value in values) / total_runs - mean * mean
+    return {"mean": mean, "std": math.sqrt(max(0.0, variance))}
+
+
 def average_dictionary(data_list):
+    """Return population means and standard deviations across seeds.
+
+    A subgroup absent from one run contributes zero for that run. This matters
+    for predicted-only labels, lengths, or depths that are not produced by every
+    seed.
+    """
     if not data_list:
-        return {
-            "overall": {},
-            "by_label": {},
-            "by_depth": {},
-            "by_length": {},
+        return {section: {} for section in SECTIONS}
+
+    total_runs = len(data_list)
+    result = {section: {} for section in SECTIONS}
+    overall_metrics = {
+        metric
+        for run in data_list
+        for metric in run.get("overall", {})
+    }
+    for metric in sorted(overall_metrics):
+        values = [
+            run["overall"][metric]
+            for run in data_list
+            if metric in run.get("overall", {})
+        ]
+        result["overall"][metric] = _summary(values, total_runs)
+
+    for section in ("by_label", "by_depth", "by_length"):
+        groups = {
+            group
+            for run in data_list
+            for group in run.get(section, {})
         }
-
-    count = len(data_list)
-
-    # Initialize structures to store sums and sums of squares
-    result_sums = {
-        "overall": defaultdict(lambda: {"sum": 0.0, "sum_sq": 0.0}),
-        "by_label": defaultdict(lambda: defaultdict(lambda: {"sum": 0.0, "sum_sq": 0.0})),
-        "by_depth": defaultdict(lambda: defaultdict(lambda: {"sum": 0.0, "sum_sq": 0.0})),
-        "by_length": defaultdict(lambda: defaultdict(lambda: {"sum": 0.0, "sum_sq": 0.0})),
-    }
-
-    # Sum up all values and their squares
-    for data in data_list:
-        # Handle overall metrics
-        if "overall" in data:
-            for metric, value in data["overall"].items():
-                result_sums["overall"][metric]["sum"] += value
-                result_sums["overall"][metric]["sum_sq"] += value ** 2
-        
-        # Handle by_label metrics
-        if "by_label" in data:
-            for label, metrics in data["by_label"].items():
-                for metric, value in metrics.items():
-                    result_sums["by_label"][label][metric]["sum"] += value
-                    result_sums["by_label"][label][metric]["sum_sq"] += value ** 2
-        
-        # Handle by_depth metrics
-        if "by_depth" in data:
-            for depth, metrics in data["by_depth"].items():
-                for metric, value in metrics.items():
-                    result_sums["by_depth"][depth][metric]["sum"] += value
-                    result_sums["by_depth"][depth][metric]["sum_sq"] += value ** 2
-
-        # Handle by_length metrics
-        if "by_length" in data:
-            for length, metrics in data["by_length"].items():
-                for metric, value in metrics.items():
-                    result_sums["by_length"][length][metric]["sum"] += value
-                    result_sums["by_length"][length][metric]["sum_sq"] += value ** 2
-
-    # Prepare the final result dictionary
-    final_result = {
-        "overall": {},
-        "by_label": defaultdict(dict),
-        "by_depth": defaultdict(dict),
-        "by_length": defaultdict(dict),
-    }
-
-    # Calculate means and standard deviations for overall metrics
-    for metric, sums_data in result_sums["overall"].items():
-        mean = sums_data["sum"] / count
-        variance = (sums_data["sum_sq"] / count) - (mean ** 2)
-        std_dev = math.sqrt(max(0, variance))  # max(0, ...) to avoid domain error with sqrt
-        final_result["overall"][metric] = {"mean": mean, "std": std_dev}
-    
-    # Calculate means and standard deviations for by_label metrics
-    for label, metrics_data in result_sums["by_label"].items():
-        for metric, sums_data in metrics_data.items():
-            mean = sums_data["sum"] / count
-            variance = (sums_data["sum_sq"] / count) - (mean ** 2)
-            std_dev = math.sqrt(max(0, variance))
-            final_result["by_label"][label][metric] = {"mean": mean, "std": std_dev}
-    
-    # Calculate means and standard deviations for by_depth metrics
-    for depth, metrics_data in result_sums["by_depth"].items():
-        for metric, sums_data in metrics_data.items():
-            mean = sums_data["sum"] / count
-            variance = (sums_data["sum_sq"] / count) - (mean ** 2)
-            std_dev = math.sqrt(max(0, variance))
-            final_result["by_depth"][depth][metric] = {"mean": mean, "std": std_dev}
-
-    # Calculate means and standard deviations for by_length metrics
-    for length, metrics_data in result_sums["by_length"].items():
-        for metric, sums_data in metrics_data.items():
-            mean = sums_data["sum"] / count
-            variance = (sums_data["sum_sq"] / count) - (mean ** 2)
-            std_dev = math.sqrt(max(0, variance))
-            final_result["by_length"][length][metric] = {"mean": mean, "std": std_dev}
-
-    # Convert defaultdicts to regular dicts for the final output
-    return {
-        "overall": dict(final_result["overall"]),
-        "by_label": {
-            label: dict(metrics) 
-            for label, metrics in final_result["by_label"].items()
-        },
-        "by_depth": {
-            depth: dict(metrics)
-            for depth, metrics in final_result["by_depth"].items()
-        },
-        "by_length": {
-            length: dict(metrics)
-            for length, metrics in final_result["by_length"].items()
-        }
-    }
+        for group in sorted(groups, key=str):
+            metrics = {
+                metric
+                for run in data_list
+                for metric in run.get(section, {}).get(group, {})
+            }
+            result[section][group] = {}
+            for metric in sorted(metrics):
+                values = [
+                    run[section][group][metric]
+                    for run in data_list
+                    if metric in run.get(section, {}).get(group, {})
+                ]
+                result[section][group][metric] = _summary(values, total_runs)
+    return result

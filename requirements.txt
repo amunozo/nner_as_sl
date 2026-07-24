@@ -1,8 +1,9 @@
-torch==2.4.0
-networkx==3.3
-uniplot==0.13
-stanza==1.8.2
-transformers
-nltk
-jsonnet
-sentencepiece
+jsonnet>=0.20
+networkx>=3.2
+nltk>=3.8
+sentencepiece>=0.2
+stanza>=1.8,<2
+torch>=2.1,<2.5
+tqdm>=4.66
+transformers>=4.38,<5
+uniplot>=0.13

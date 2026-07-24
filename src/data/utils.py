@@ -1,413 +1,347 @@
-import os
+"""Data conversion helpers for nested named-entity recognition."""
+
 import json
-import nltk
+import subprocess
+import sys
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _data_examples(text):
+    return [block for block in text.replace("\r\n", "\n").strip().split("\n\n") if block]
 
 
 def add_bos_eos(labels_file):
-    """
-    Add -BOS- and -EOS- markers to the selected files to allow CoDeLin to decode
-    MaChAmp files that do not use these markers.
-    """
-    with open(labels_file, 'r') as f:
-        text = f.read()
-    sentences = text.split('\n\n')
-    n_columns = len(text.split('\n')[0].split('\t'))
-    if n_columns == 1:
-        n_columns = 2 # chapuza
-    print('n_columns:', n_columns)
+    """Add CoDeLin boundary rows to each sentence in a MaChAmp label file.
 
-    sentences = [
-        '-BOS-\t'*(n_columns-1)+'-BOS-\n' +
-        sentence + '\n'+
-        '-EOS-\t'*(n_columns-1)+'-EOS-\n' 
-        for sentence in sentences if sentence != ''
-    ]
+    The operation is idempotent so that evaluating existing predictions twice
+    does not add duplicate markers.
+    """
+    path = Path(labels_file)
+    examples = _data_examples(path.read_text(encoding="utf-8"))
+    if not examples:
+        raise ValueError(f"Label file is empty: {path}")
 
-    with open(labels_file, 'w') as f:
-        f.writelines('\n'.join(sentences) + '\n')
-    
-    return labels_file
+    output = []
+    for example in examples:
+        lines = example.splitlines()
+        if lines[0].startswith("-BOS-") and lines[-1].startswith("-EOS-"):
+            output.append("\n".join(lines))
+            continue
+        n_columns = len(lines[0].split("\t"))
+        # Single-task MaChAmp output omits the token column expected by CoDeLin.
+        n_columns = max(n_columns, 2)
+        bos = "\t".join(["-BOS-"] * n_columns)
+        eos = "\t".join(["-EOS-"] * n_columns)
+        output.append("\n".join([bos, *lines, eos]))
+
+    path.write_text("\n\n".join(output) + "\n", encoding="utf-8")
+    return str(path)
+
 
 def remove_comments(file):
-    """
-    Remove the comments from the .labels files
-    """
-    with open(file, 'r', encoding='utf-8') as f:
-        lines = f.readlines()
-    
-    output_lines = [line for line in lines if not line.startswith('#')]
+    """Remove comment rows from a label file in place."""
+    path = Path(file)
+    lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
+    path.write_text(
+        "".join(line for line in lines if not line.startswith("#")),
+        encoding="utf-8",
+    )
 
-    with open(file, 'w', encoding='utf-8') as f:
-        f.writelines(output_lines)
 
 def parse_input(input_text):
-    sentences = input_text.strip().split('\n\n')
+    """Parse the four-column BIO format used by early preprocessing code."""
     parsed_data = []
-
-    for sentence in sentences:
-        lines = sentence.strip().split('\n')
+    for example in _data_examples(input_text):
+        lines = example.splitlines()
         sentence_info = lines[0]
         tokens = []
         entities = []
         current_entity = None
-
         for line in lines[1:]:
-            parts = line.split('\t')
-            if len(parts) == 4:
-                token_id, token, entity_tag, nested_entity_tag = parts
-                tokens.append(token)
-                
-                if entity_tag.startswith('B-'):
-                    if current_entity:
-                        entities.append(current_entity)
-                    current_entity = [entity_tag[2:], int(token_id)-1, int(token_id)]
-                elif entity_tag.startswith('I-') and current_entity:
-                    current_entity[2] = int(token_id)
-                elif entity_tag == 'O' and current_entity:
+            parts = line.split("\t")
+            if len(parts) != 4:
+                continue
+            token_id, token, entity_tag, _nested_entity_tag = parts
+            tokens.append(token)
+            token_index = int(token_id) - 1
+            if entity_tag.startswith("B-"):
+                if current_entity:
                     entities.append(current_entity)
-                    current_entity = None
+                current_entity = [entity_tag[2:], token_index, token_index]
+            elif entity_tag.startswith("I-") and current_entity:
+                current_entity[2] = token_index
+            elif entity_tag == "O" and current_entity:
+                entities.append(current_entity)
+                current_entity = None
         if current_entity:
             entities.append(current_entity)
-
         parsed_data.append((sentence_info, tokens, entities))
-
     return parsed_data
 
+
 def remove_features(file):
-    """
-    Remove the second column of a 3-column .labels file
-    """
-    with open(file, 'r', encoding='utf-8') as f:
-        lines = f.readlines()
-    with open(file, 'w', encoding='utf-8') as f:
-        for line in lines:
-            if line == '\n':
-                f.write('\n')
-                continue
-            line = line.split('\t')
-            line = [line[0], line[2]]
-            f.write("\t".join(line))
-            
+    """Keep the first and third columns of a three-column label file."""
+    path = Path(file)
+    output = []
+    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        if not line:
+            output.append("")
+            continue
+        columns = line.split("\t")
+        if len(columns) < 3:
+            raise ValueError(f"Expected at least 3 columns at {path}:{line_number}")
+        output.append("\t".join((columns[0], columns[2])))
+    path.write_text("\n".join(output) + "\n", encoding="utf-8")
+
+
 def format_output(parsed_data):
     formatted_output = []
-    
-    for sentence_info, tokens, entities in parsed_data:
-        sentence_text = ' '.join(tokens)
-        entity_ranges = []
-        
-        for entity in entities:
-            entity_type, start, end = entity
-            entity_range = f'{start},{end} {entity_type}'
-            entity_ranges.append(entity_range)
-        
-        formatted_output.append(f"{sentence_text}\n{'|'.join(entity_ranges)}")
-    
-    return '\n\n'.join(formatted_output)
+    for _sentence_info, tokens, entities in parsed_data:
+        ranges = [f"{start},{end} {entity_type}" for entity_type, start, end in entities]
+        formatted_output.append(f"{' '.join(tokens)}\n{'|'.join(ranges)}")
+    return "\n\n".join(formatted_output)
 
-def nner_to_tree(text_str, entities_str):
-    tokens = text_str.split()
-    entities = entities_str.split('|')
-    starts = []
-    ends = []
-
-    if len(entities) > 1:
-        types = [entity.split(" ")[1] for entity in entities]
-        for entity in entities:
-            start, end = [int(n) for n in entity.split(" ")[0].split(',')]
-            starts.append(start)
-            ends.append(end)
-    else:
-        entities = []
-
-    # Stack and output initialization
-    stack = []
-    output = ''
-
-    # Start with the ROOT
-    stack.append("ROOT")
-    output += f'({stack[-1]}'
-
-    # Processing tokens with stack
-    for i, token in enumerate(tokens):
-        # Handle opening new entities
-        while i in starts:
-            index = starts.index(i)
-            entity_type = types[index]
-            stack.append(entity_type)
-            output += f' ({stack[-1]}'
-            starts[index] = -1  # Mark this start as processed
-
-        # Add the current token to the output
-        output += f' {token}'
-
-        # Handle closing entities
-        while i in ends:
-            index = ends.index(i)
-            output += ')'
-            stack.pop()  # Close the last opened entity
-            ends[index] = -1  # Mark this end as processed
-
-    # Finalize the output by closing the ROOT
-    output += ')'
-
-    return output
-
-def to_parenthesized(input_file_path, output_file_path):
-    with open(input_file_path, 'r', encoding='utf-8') as file:
-        content = file.read().strip().replace('\n\n\n', '\n\n').split('\n\n')
-
-    trees = []
-
-    for example in content:
-        text_str = example.split('\n')[0].replace('(', '-LB-').replace(')', '-RB-')
-        entities_str = example.split('\n')[1] if len(example.split('\n')) > 1 else ''
-        
-        # Parse entities
-        entities = parse_entities(entities_str)
-
-        # Create tree with nesting handled
-        tree = build_tree(text_str, entities)
-        trees.append(tree)
-
-    with open(output_file_path, 'w', encoding='utf-8') as f:
-        f.write('\n'.join(trees))
-
-    return output_file_path
 
 def parse_entities(entities_str):
-    """
-    Parse the entity string into a list of tuples (start, end, entity_type).
-    Example input: '0,5 ORG|4,5 GPE|12,12 GPE|14,15 ORG|14,19 GPE|22,22 FAC|22,29 GPE'
-    """
+    """Parse ``start,end LABEL`` annotations with inclusive token offsets."""
     entities = []
-    for entity in entities_str.split('|'):
-        if entity:
-            span, entity_type = entity.split()
-            start, end = map(int, span.split(','))
-            entities.append((start, end, entity_type))
-    
-    # Sort by start, then end (longest entities come first if they overlap)
-    entities.sort(key=lambda x: (x[0], -x[1]))
-    return entities
+    for raw_entity in entities_str.split("|"):
+        raw_entity = raw_entity.strip()
+        if not raw_entity:
+            continue
+        try:
+            span, entity_type = raw_entity.split(maxsplit=1)
+            start, end = (int(value) for value in span.split(",", 1))
+        except (TypeError, ValueError) as error:
+            raise ValueError(f"Invalid entity annotation: {raw_entity!r}") from error
+        if start < 0 or end < start:
+            raise ValueError(f"Invalid inclusive span: {start},{end}")
+        entities.append((start, end, entity_type))
+    return sorted(entities, key=lambda entity: (entity[0], -entity[1], entity[2]))
+
+
+def _validate_nested_entities(entities, token_count):
+    for start, end, _label in entities:
+        if end >= token_count:
+            raise ValueError(f"Entity span {start},{end} exceeds {token_count} tokens")
+    for index, first in enumerate(entities):
+        for second in entities[index + 1 :]:
+            first_start, first_end = first[:2]
+            second_start, second_end = second[:2]
+            if first_start < second_start <= first_end < second_end:
+                raise ValueError(f"Crossing entity spans are not supported: {first}, {second}")
+            if second_start < first_start <= second_end < first_end:
+                raise ValueError(f"Crossing entity spans are not supported: {first}, {second}")
 
 
 def build_tree(text_str, entities):
-    """
-    Build a nested tree string from the text and entities, handling nesting properly.
-    """
+    """Build a parenthesized tree for nested, non-crossing entity spans."""
     words = text_str.split()
-    result = []
-    stack = []  # Each element is (end_index, entity_type)
+    entities = sorted(list(entities), key=lambda entity: (entity[0], -entity[1], entity[2]))
+    _validate_nested_entities(entities, len(words))
 
-    for i, word in enumerate(words):
-        # Close any entities that have ended before the current word
-        indices_to_close = []
-        for idx in reversed(range(len(stack))):
-            if stack[idx][0] < i:
-                _, entity_type = stack.pop(idx)
-                result.append(")")
-        
-        # Open any new entities starting at current word
-        while entities and entities[0][0] == i:
-            start, end, entity_type = entities.pop(0)
-            result.append(f"({entity_type}")
-            stack.append((end, entity_type))
+    openings = {}
+    for entity in entities:
+        openings.setdefault(entity[0], []).append(entity)
 
-        # Add the word
-        result.append(word)
+    result = ["(ROOT"]
+    stack = []
+    for token_index, word in enumerate(words):
+        for entity in openings.get(token_index, []):
+            result.append(f" ({entity[2]}")
+            stack.append(entity)
+        result.append(f" {word}")
+        while stack and stack[-1][1] == token_index:
+            result.append(")")
+            stack.pop()
 
-        # Close any entities that end at current word
-        indices_to_close = []
-        for idx in reversed(range(len(stack))):
-            if stack[idx][0] == i:
-                _, entity_type = stack.pop(idx)
-                result.append(")")
+    if stack:
+        raise ValueError(f"Unclosed entity spans: {stack}")
+    result.append(")")
+    return "".join(result)
 
-    # Close any remaining entities
-    while stack:
-        _, entity_type = stack.pop()
-        result.append(")")
 
-    return f"(ROOT {' '.join(result).replace(' )', ')')})"
+def nner_to_tree(text_str, entities_str):
+    """Convert one NNER example to a parenthesized tree."""
+    return build_tree(text_str, parse_entities(entities_str))
+
+
+def iter_data_examples(text):
+    """Yield ``(tokens, entity_set)`` pairs from the two-line data format."""
+    for example_index, example in enumerate(_data_examples(text), 1):
+        lines = example.splitlines()
+        if len(lines) > 2:
+            raise ValueError(f"Example {example_index} has more than two lines")
+        tokens = lines[0].split()
+        entities = {
+            (label, start, end)
+            for start, end, label in parse_entities(lines[1] if len(lines) == 2 else "")
+        }
+        _validate_nested_entities(
+            [(start, end, label) for label, start, end in entities],
+            len(tokens),
+        )
+        yield tokens, entities
+
+
+def to_parenthesized(input_file_path, output_file_path):
+    """Convert a complete NNER data file to one tree per line."""
+    input_path = Path(input_file_path)
+    trees = []
+    for tokens, entities in iter_data_examples(input_path.read_text(encoding="utf-8")):
+        text = " ".join(tokens).replace("(", "-LB-").replace(")", "-RB-")
+        spans = [(start, end, label) for label, start, end in entities]
+        trees.append(build_tree(text, spans))
+    Path(output_file_path).write_text("\n".join(trees) + "\n", encoding="utf-8")
+    return str(output_file_path)
 
 
 def remove_bos_eos(input_file):
-    """
-    Remove the -BOS- and -EOS- rows from the .labels files
-    """
-    with open(input_file, 'r', encoding='utf-8') as file:
-        lines = file.readlines()
-    with open(input_file, 'w', encoding='utf-8') as file:
-        for line in lines:
-            if '-BOS-' not in line and '-EOS-' not in line:
-                file.write(line)
+    """Remove CoDeLin boundary rows from a label file in place."""
+    path = Path(input_file)
+    lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
+    path.write_text(
+        "".join(line for line in lines if "-BOS-" not in line and "-EOS-" not in line),
+        encoding="utf-8",
+    )
 
 
-def encode(encoding, trees_file, labels_file, multitask=True):
-    """
-    Encodes the input data into a .labels format using CoDeLin
-    """
+def _codelin_command(mode, encoding, input_file, output_file, multitask, codelin_dir):
+    script = Path(codelin_dir) / "main.py"
+    if not script.is_file():
+        raise FileNotFoundError(
+            f"CoDeLin entry point not found at {script}. "
+            "Run 'git submodule update --init --recursive'."
+        )
+    command = [
+        sys.executable,
+        str(script),
+        "CONST",
+        mode,
+        encoding,
+        str(input_file),
+        str(output_file),
+        "--sep",
+        "[_]",
+        "--ujoiner",
+        "[+]",
+        "--b_marker",
+        "[b]",
+    ]
     if multitask:
-        mt = '--multitask --n_label_cols 3'
-    else:
-        mt = ''
-    codelin_script = f'python CoDeLin/main.py CONST ENC {encoding} {trees_file} {labels_file}  \
-        --sep [_] --ujoiner [+] {mt} --b_marker [b] --ignore_postag' #separator not present in labels
-    
-    os.system(codelin_script)
-    
-    return labels_file
+        command.extend(("--multitask", "--n_label_cols", "3"))
+    if mode == "ENC":
+        command.append("--ignore_postags")
+    return command
 
-def decode(encoding, labels_file, trees_file, multitask=True):
-    """
-    Decodes the input data into a .trees format using CoDeLin
-    """
-    if multitask:
-        mt = '--multitask --n_label_cols 3'
-    else:
-        mt = ''
 
-    decoding_script =  f'python CoDeLin/main.py CONST DEC {encoding} {labels_file} {trees_file} \
-        --sep [_] --ujoiner [+] --b_marker [b] {mt}'
+def encode(encoding, trees_file, labels_file, multitask=True, codelin_dir=None):
+    """Encode trees as sequence labels with CoDeLin."""
+    codelin_dir = codelin_dir or PROJECT_ROOT / "CoDeLin"
+    subprocess.run(
+        _codelin_command(
+            "ENC", encoding, trees_file, labels_file, multitask, codelin_dir
+        ),
+        check=True,
+        cwd=PROJECT_ROOT,
+    )
+    return str(labels_file)
 
-    os.system(decoding_script)
 
-    return trees_file
+def decode(encoding, labels_file, trees_file, multitask=True, codelin_dir=None):
+    """Decode sequence labels to trees with CoDeLin."""
+    codelin_dir = codelin_dir or PROJECT_ROOT / "CoDeLin"
+    subprocess.run(
+        _codelin_command(
+            "DEC", encoding, labels_file, trees_file, multitask, codelin_dir
+        ),
+        check=True,
+        cwd=PROJECT_ROOT,
+    )
+    return str(trees_file)
+
 
 def extract_entities_from_tree(tree):
-    """
-    Given a tree, it extract the text and the entities
-    """
+    """Extract plain text and inclusive entity spans from an NLTK tree."""
+    from nltk.tree import Tree
+
     def traverse_tree(subtree, position):
         text = []
         entities = []
-        
         for node in subtree:
-            if isinstance(node, nltk.Tree):
-                entity_type = node.label()
+            if isinstance(node, Tree):
                 entity_text, child_entities = traverse_tree(node, position)
-                
-                start_position = position
-                entity_len = len(entity_text.split())
-                end_position = start_position + entity_len - 1
-                
+                entity_length = len(entity_text.split())
+                if node.label() != "ROOT":
+                    entities.append(
+                        (position, position + entity_length - 1, node.label())
+                    )
                 text.append(entity_text)
-                if entity_type != 'ROOT':
-                    entities.append((start_position, end_position, entity_type))
-                
-                position += entity_len
                 entities.extend(child_entities)
+                position += entity_length
             else:
                 text.append(node)
                 position += 1
-        
         return " ".join(text), entities
 
-    text, entities = traverse_tree(tree, 0)
-    return text, entities
+    return traverse_tree(tree, 0)
+
 
 def extract_entities_from_str(entities_str):
-    """
-    Given the entity annotation in string format, returns a list of dicts 
-    with label, start, and end of the entity.
-    """
-    entities = set([
-        (
-            entity.split(' ')[1],
-            int(span.split(',')[0]),
-            int(span.split(',')[1])
-        )
-        for entity in entities_str.split('|')
-        for span in [entity.split(' ')[0]]
-    ])
-    
-    return entities
+    """Return ``(label, start, end)`` tuples from an annotation line."""
+    return {
+        (label, start, end) for start, end, label in parse_entities(entities_str)
+    }
 
 
 def find_entities(file_path):
-    """
-    Given a NNER data file, it returns a list of lists of tuples with
-    start, end and entity type for every sentence.
-    """
-    with open(file_path, 'r', encoding='utf-8') as f:
-        lines = f.read().replace('\n\n\n', '\n\n').split('\n\n')
+    """Return one exact-entity set per sentence in an NNER data file."""
+    text = Path(file_path).read_text(encoding="utf-8")
+    return [entities for _tokens, entities in iter_data_examples(text)]
 
-    entities_str_list = [line.split('\n')[1] if len(line.split('\n')) == 2 else '' for line in lines]
-    entities_list = []
 
-    for entities_str in entities_str_list:
-        if entities_str != '':
-            entities = extract_entities_from_str(entities_str)
-        else:
-            entities = set()
+def data_to_jsonlines(data_file, jsonlines_file):
+    """Convert NNER data to JSON Lines while retaining inclusive offsets."""
+    records = []
+    text = Path(data_file).read_text(encoding="utf-8")
+    for tokens, entities in iter_data_examples(text):
+        mentions = []
+        for label, start, end in sorted(entities, key=lambda item: (item[1], item[2])):
+            mentions.append(
+                {
+                    "entity_type": label,
+                    "start": start,
+                    "end": end,
+                    "text": " ".join(tokens[start : end + 1]),
+                }
+            )
+        records.append({"tokens": tokens, "entity_mentions": mentions})
 
-        entities_list.append(entities)
-
-    return entities_list
-
-def data_to_jsonlines(data_file, jsonlines_file): # we repeat code to test fast.
-    data_list = []
-    
-    with open(data_file, 'r', encoding='utf-8') as f:
-        lines = f.read().replace('\n\n\n', '\n\n').split('\n\n')
-
-    for line in lines:
-        tokens = line.split('\n')[0].split()
-        entities_str = line.split('\n')[1] if len(line.split('\n')) == 2 else ''
-        if tokens == []:
-            continue
-
-        data = {}
-
-        data["tokens"] = tokens
-        #data["doc_id"] = ""
-        #data["sent_id"] = ""
-        data["entity_mentions"] = []
-
-        for entity in entities_str.split('|'):
-            if len(entity.split(' ')) == 1:
-                continue
-
-            span = entity.split(' ')[0] 
-            entity_type = entity.split(' ')[1]
-            start = int(span.split(',')[0])
-            end = int(span.split(',')[1])
-            text = ' '.join(tokens[start:end])
-            
-            data["entity_mentions"].append({
-                "entity_type": entity_type,
-                "start": start,
-                "end": end,
-                "text": text
-            })
-        
-        
-        data_list.append(data)
-    
-    with open(jsonlines_file, 'w', encoding='utf-8') as json_file:
-        for entry in data_list:
-            json_file.write(json.dumps(entry) + '\n')
-
-    return jsonlines_file
+    with Path(jsonlines_file).open("w", encoding="utf-8") as stream:
+        for record in records:
+            stream.write(json.dumps(record, ensure_ascii=False) + "\n")
+    return str(jsonlines_file)
 
 
 def trees_to_data(trees_file, output_file):
-    """
-    Given a .trees file, returns .data file 
-    """
-    output_data = ''
-    with open(trees_file, 'r') as f:
-        trees = [nltk.Tree.fromstring(sentence) for sentence in f.readlines()]
-    
+    """Convert one parenthesized tree per line to NNER data format."""
+    from nltk.tree import Tree
+
+    trees = [
+        Tree.fromstring(line)
+        for line in Path(trees_file).read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    examples = []
     for tree in trees:
         text, entities = extract_entities_from_tree(tree)
-        text = text.replace('-LB-', '(').replace('-RB-', ')')
-        entities = sorted(entities, key=lambda x: ((x[0], x[1])))
-        entity_annotations = [f"{start},{end} {etype}" for start, end, etype in entities]
-        annotations = "|".join(entity_annotations)
-        output_data += f"{text}\n{annotations}\n\n"
-
-    with open(output_file, 'w') as f:
-        f.write(output_data)
-
-    return output_file
+        text = text.replace("-LB-", "(").replace("-RB-", ")")
+        annotations = "|".join(
+            f"{start},{end} {label}"
+            for start, end, label in sorted(entities, key=lambda item: (item[0], item[1]))
+        )
+        examples.append(f"{text}\n{annotations}")
+    Path(output_file).write_text("\n\n".join(examples) + "\n", encoding="utf-8")
+    return str(output_file)

@@ -1,154 +1,173 @@
-from src.evaluation.evaluator import Evaluator
-from src.evaluation.utils import average_dictionary
+#!/usr/bin/env python3
+"""Predict, decode, and evaluate nested NER models across seeds."""
+
 import argparse
-from src.data.utils import trees_to_data, decode, add_bos_eos
 import json
-import os
-import time
 import sys
+import time
+from pathlib import Path
 
-# Add the project root to the python path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Evaluate a Machamp model (caio evaluator only)")
-    parser.add_argument('--encoder', type=str, required=True, help="Name of the encoder used from HF")
-    parser.add_argument('--encoding', type=str, required=True, help="Constituency encoding")
-    parser.add_argument('--dataset', type=str, required=True, help="Name of the dataset to evaluate on")
-    parser.add_argument('--device', type=str, default='0', help="Device to run the evaluation on")
-    parser.add_argument('--predict', action='store_true', help="Whether to predict (default: False)")
-    parser.add_argument('--no-predict', dest='predict', action='store_false', help="Whether to use existing predictions")
-    parser.add_argument('--by-label', action='store_true', help="Evaluate metrics by label")
-    parser.add_argument('--by-depth', action='store_true', help="Evaluate metrics by depth")
-    parser.add_argument('--by-length', action='store_true', help="Evaluate metrics by entity length")
-    parser.set_defaults(predict=True, by_depth=True, by_label=True, by_length=True)
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PROJECT_ROOT))
 
-    args = parser.parse_args()
+from src.data.utils import (  # noqa: E402
+    add_bos_eos,
+    decode,
+    iter_data_examples,
+    trees_to_data,
+)
+from src.evaluation.evaluator import Evaluator  # noqa: E402
+from src.evaluation.utils import average_dictionary  # noqa: E402
 
-    evaluator = Evaluator(args.encoder, args.dataset, args.encoding, args.device)
+
+def count_data(path):
+    examples = list(iter_data_examples(Path(path).read_text(encoding="utf-8")))
+    return len(examples), sum(len(tokens) for tokens, _entities in examples)
+
+
+def timing_summary(timings):
+    if not timings:
+        return {}
+    total_time = sum(item["total"] for item in timings)
+    total_sentences = sum(item["num_sentences"] for item in timings)
+    total_tokens = sum(item["num_tokens"] for item in timings)
+    return {
+        "total_predict": sum(item["predict"] for item in timings),
+        "total_decode": sum(item["decode"] for item in timings),
+        "total_time": total_time,
+        "total_sentences": total_sentences,
+        "total_tokens": total_tokens,
+        "avg_sentences_per_second": (
+            total_sentences / total_time if total_time else 0.0
+        ),
+        "avg_tokens_per_second": total_tokens / total_time if total_time else 0.0,
+        "avg_time_per_sentence": (
+            total_time / total_sentences if total_sentences else None
+        ),
+    }
+
+
+def build_parser():
+    parser = argparse.ArgumentParser(
+        description="Evaluate trained MaChAmp nested NER models."
+    )
+    parser.add_argument("--encoder", required=True)
+    parser.add_argument("--encoding", required=True)
+    parser.add_argument("--dataset", required=True)
+    parser.add_argument("--device", default="0")
+    parser.add_argument(
+        "--predict",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="run MaChAmp prediction before decoding",
+    )
+    parser.add_argument(
+        "--by-label", action=argparse.BooleanOptionalAction, default=True
+    )
+    parser.add_argument(
+        "--by-depth", action=argparse.BooleanOptionalAction, default=True
+    )
+    parser.add_argument(
+        "--by-length", action=argparse.BooleanOptionalAction, default=True
+    )
+    parser.add_argument("--seed", action="append", help="evaluate only this seed")
+    parser.add_argument("--data-dir", type=Path, default=PROJECT_ROOT / "data")
+    parser.add_argument("--logs-dir", type=Path, default=PROJECT_ROOT / "logs")
+    parser.add_argument("--machamp-dir", type=Path, default=PROJECT_ROOT / "machamp")
+    parser.add_argument("--codelin-dir", type=Path, default=PROJECT_ROOT / "CoDeLin")
+    return parser
+
+
+def main(argv=None):
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    evaluator = Evaluator(
+        args.encoder,
+        args.dataset,
+        args.encoding,
+        args.device,
+        project_root=PROJECT_ROOT,
+        data_dir=args.data_dir,
+        logs_dir=args.logs_dir,
+        machamp_dir=args.machamp_dir,
+    )
+    seeds = args.seed or evaluator.seeds
+    if not seeds:
+        parser.error(f"No seed directories found under {evaluator.model_dirs}")
+
+    gold_data = args.data_dir / args.dataset / "test.data"
+    if not gold_data.is_file():
+        parser.error(f"Gold data not found: {gold_data}")
+
     all_results = []
     all_times = []
-
-    # Base directory for model evaluations
-    model_dirs = f'logs/machamp/{evaluator.dataset}/{evaluator.encoder}/{evaluator.encoding}/'
-    gold_data = f'data/{evaluator.dataset}/test.data'
-
-    for seed in evaluator.seeds:
-        print(f"Evaluating seed: {seed}")
-        time_dict = {}
-        total_start = time.time()
-        predict_end = predict_start = total_start # Initialize in case --no-predict and file missing
-
-        # Predict
+    for seed in seeds:
+        print(f"Evaluating seed {seed}")
+        total_start = time.perf_counter()
         if args.predict:
-            predict_start = time.time()
-            predicted_labels = evaluator.predict(seed)
-            predict_end = time.time()
-            predicted_labels = add_bos_eos(predicted_labels)
-            time_dict['predict'] = predict_end - predict_start
+            predict_start = time.perf_counter()
+            predicted_labels = Path(evaluator.predict(seed))
+            predict_time = time.perf_counter() - predict_start
         else:
-            predicted_labels = f'{model_dirs}seed_{seed}/output.labels'
-            if not os.path.exists(predicted_labels):
-                print(f"Prediction file not found for seed {seed}. Skipping...")
-                continue
-            # If not predicting, set predict time to 0 or handle appropriately
-            time_dict['predict'] = 0.0 # Or load from a previous run if available
+            predicted_labels = evaluator.model_dirs / f"seed_{seed}" / "output.labels"
+            if not predicted_labels.is_file():
+                parser.error(f"Prediction file not found: {predicted_labels}")
+            predict_time = 0.0
 
-        # Decode
-        decode_start = time.time()
-        pred_trees = decode(args.encoding, predicted_labels, predicted_labels.replace('labels', 'trees'))
-        pred_data = trees_to_data(pred_trees, pred_trees.replace('trees', 'data'))
-        decode_end = time.time()
-        time_dict['decode'] = decode_end - decode_start
-
-        # Count sentences and tokens
-        num_sentences = 0
-        num_tokens = 0
-        try:
-            with open(pred_data, 'r') as f:
-                for line in f:
-                    num_sentences += 1
-                    num_tokens += len(line.strip().split())
-        except FileNotFoundError:
-             print(f"Decoded data file not found: {pred_data}. Skipping timing calculation for this seed.")
-             # Handle error appropriately, maybe skip this seed or set counts to 0
-             num_sentences = 0
-             num_tokens = 0
-             # Decide how to handle timing if counts are zero
-             time_dict['total'] = time.time() - total_start # Still record total time spent so far
-             time_dict['num_sentences'] = 0
-             time_dict['num_tokens'] = 0
-             # Add basic timing to all_times before continuing
-             all_times.append({
-                 'predict': time_dict.get('predict', 0.0),
-                 'decode': time_dict.get('decode', 0.0),
-                 'total': time_dict.get('total', 0.0),
-                 'num_sentences': 0,
-                 'num_tokens': 0,
-             })
-             continue # Skip metric calculation and saving for this seed
-
-
-        time_dict['num_sentences'] = num_sentences
-        time_dict['num_tokens'] = num_tokens
-        time_dict['total'] = time.time() - total_start
-
-        seed_results = {}
-        # Calculate metrics
-        seed_results["overall"] = evaluator.calculate_metrics(gold_data, pred_data)
-        if args.by_depth:
-            seed_results["by_depth"] = evaluator.calculate_metrics_by_depth(gold_data, pred_data)
-        if args.by_length:
-            seed_results["by_length"] = evaluator.calculate_metrics_by_length(gold_data, pred_data)
-        if args.by_label:
-            seed_results["by_label"] = evaluator.calculate_metrics_by_label(gold_data, pred_data)
-
-        # Add simplified timing info to results and track for averaging
-        simplified_timing = {
-            'predict': time_dict.get('predict', 0.0), # Use .get for safety
-            'decode': time_dict['decode'],
-            'total': time_dict['total'],
-            'num_sentences': time_dict['num_sentences'],
-            'num_tokens': time_dict['num_tokens'],
+        add_bos_eos(predicted_labels)
+        decode_start = time.perf_counter()
+        predicted_trees = predicted_labels.with_suffix(".trees")
+        predicted_data = predicted_labels.with_suffix(".data")
+        decode(
+            args.encoding,
+            predicted_labels,
+            predicted_trees,
+            codelin_dir=args.codelin_dir,
+        )
+        trees_to_data(predicted_trees, predicted_data)
+        decode_time = time.perf_counter() - decode_start
+        num_sentences, num_tokens = count_data(predicted_data)
+        timing = {
+            "predict": predict_time,
+            "decode": decode_time,
+            "total": time.perf_counter() - total_start,
+            "num_sentences": num_sentences,
+            "num_tokens": num_tokens,
         }
-        seed_results['timing'] = simplified_timing
-        all_results.append(seed_results)
-        all_times.append(simplified_timing) # Append the simplified dict
 
-        seed_dir = os.path.join(model_dirs, f"seed_{seed}")
-        os.makedirs(seed_dir, exist_ok=True)
-        with open(os.path.join(seed_dir, "results.json"), "w") as f:
-            json.dump(seed_results, f, indent=2)
+        results = {"overall": evaluator.calculate_metrics(gold_data, predicted_data)}
+        if args.by_depth:
+            results["by_depth"] = evaluator.calculate_metrics_by_depth(
+                gold_data, predicted_data
+            )
+        if args.by_length:
+            results["by_length"] = evaluator.calculate_metrics_by_length(
+                gold_data, predicted_data
+            )
+        if args.by_label:
+            results["by_label"] = evaluator.calculate_metrics_by_label(
+                gold_data, predicted_data
+            )
+        results["timing"] = timing
+        all_results.append(results)
+        all_times.append(timing)
 
-    avg_results = average_dictionary(all_results)
+        seed_dir = evaluator.model_dirs / f"seed_{seed}"
+        (seed_dir / "results.json").write_text(
+            json.dumps(results, indent=2, allow_nan=False) + "\n",
+            encoding="utf-8",
+        )
 
-    # Compute global timing (simplified: only total sums)
-    global_time = {}
-    if all_times:
-        global_time['total_predict'] = sum(t.get('predict', 0.0) for t in all_times) # Use .get for safety
-        global_time['total_decode'] = sum(t['decode'] for t in all_times)
-        global_time['total_time'] = sum(t['total'] for t in all_times)
-        global_time['total_sentences'] = sum(t['num_sentences'] for t in all_times)
-        global_time['total_tokens'] = sum(t['num_tokens'] for t in all_times)
-        # Optionally calculate overall rates here if needed:
-        if global_time['total_time'] > 0:
-             global_time['avg_sentences_per_second'] = global_time['total_sentences'] / global_time['total_time']
-             global_time['avg_tokens_per_second'] = global_time['total_tokens'] / global_time['total_time']
-        else:
-             global_time['avg_sentences_per_second'] = 0.0
-             global_time['avg_tokens_per_second'] = 0.0
-        if global_time['total_sentences'] > 0:
-             global_time['avg_time_per_sentence'] = global_time['total_time'] / global_time['total_sentences']
-        else:
-             global_time['avg_time_per_sentence'] = float('inf')
+    averaged = average_dictionary(all_results)
+    averaged["timing"] = timing_summary(all_times)
+    evaluator.model_dirs.mkdir(parents=True, exist_ok=True)
+    (evaluator.model_dirs / "avg_results.json").write_text(
+        json.dumps(averaged, indent=2, allow_nan=False) + "\n",
+        encoding="utf-8",
+    )
+    print(f"Saved per-seed and averaged results under {evaluator.model_dirs}")
 
-    # Removed micro and macro average sections for rates
 
-    avg_results['timing'] = global_time  # Ensure timing is in average results
-
-    # Save averaged results in the base model directory
-    os.makedirs(model_dirs, exist_ok=True)
-    with open(os.path.join(model_dirs, "avg_results.json"), "w") as f:
-        json.dump(avg_results, f, indent=2)
-
-    print("Done! Per-seed results and averaged results saved.")
+if __name__ == "__main__":
+    main()

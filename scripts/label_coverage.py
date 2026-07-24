@@ -1,150 +1,137 @@
-import os
-import sys
+#!/usr/bin/env python3
+"""Measure the maximum entity recall retained by each linearization."""
+
+import argparse
 import csv
-from datetime import datetime
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
+import sys
 import tempfile
-from src.data.utils import to_parenthesized, encode, trees_to_data, decode, add_bos_eos, find_entities
+from pathlib import Path
 
 
-def create_joint_file(dataset):
-    data_dir = os.path.join("data", dataset)
-    train, dev, test = [
-        os.path.join(data_dir, f"{split}.data") 
-        for split in ["train", "dev", "test"]
-    ]
-    joint_text = ""
-    for file in [train, dev, test]:
-        with open(file, 'r', encoding='utf-8') as file_:
-            lines = file_.readlines()
-            for line in lines:
-                if '-BOS-' not in line and '-EOS-' not in line:
-                    joint_text += line.strip() + "\n"
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PROJECT_ROOT))
 
-    joint_gold = tempfile.NamedTemporaryFile(delete=False)
-    with open(joint_gold.name, 'w', encoding='utf-8') as file_:
-        file_.write(joint_text)
-    return joint_gold.name
+from src.data.utils import (  # noqa: E402
+    decode,
+    encode,
+    find_entities,
+    to_parenthesized,
+    trees_to_data,
+)
 
-def max_possible_recall(filename, encoding):
-    """
-    Calculate the maximum possible recall for a given dataset and encoding.
-    """    
-    # encoding
-    trees_file = tempfile.NamedTemporaryFile(delete=False)
-    trees_file_name = to_parenthesized(
-        filename, trees_file.name
-    )
 
-    encoded_file = tempfile.NamedTemporaryFile(delete=False)
-    encoded_file_name = encode(
-        encoding, trees_file_name, encoded_file.name,
-    )
-    # decoding
-    decoded_file = tempfile.NamedTemporaryFile(delete=False)
-    decoded_file_name = decode(
-        encoding, encoded_file_name, decoded_file.name
-    )
-    decoded_file_name = trees_to_data(
-        decoded_file_name, decoded_file_name
-    )
+def create_joint_file(dataset_dir, output_file):
+    dataset_dir = Path(dataset_dir)
+    examples = []
+    for split in ("train", "dev", "test"):
+        path = dataset_dir / f"{split}.data"
+        if not path.is_file():
+            raise FileNotFoundError(f"Required split not found: {path}")
+        text = path.read_text(encoding="utf-8")
+        examples.extend(block for block in text.strip().split("\n\n") if block.strip())
+    Path(output_file).write_text("\n\n".join(examples) + "\n", encoding="utf-8")
+    return str(output_file)
 
-    # calculate recall
-    gold_entities = find_entities(filename)  # Use input filename, not joint_gold.name
-    predicted_entities = find_entities(decoded_file_name)
-    
-    n_correct = 0
-    n_gold = 0
-    id = 0
-    
-    for gold, pred in zip(gold_entities, predicted_entities):
-        id += 1
-        n_correct += len(gold.intersection(pred))
-        n_gold += len(gold)
-        missed_entities = gold - gold.intersection(pred)
-        if missed_entities:
-            print(f"Missed entities for sentence {id}: {missed_entities}")
-            print(f"Missed entities: {missed_entities}")
-    
-    # Return max possible recall as a percentage
-    max_recall = 0 if n_gold == 0 else (n_correct / n_gold)
-    
-    # Clean up temporary files
-    os.unlink(trees_file.name)
-    os.unlink(encoded_file.name)
-    os.unlink(decoded_file.name)
-    
-    return {
-        "max_recall": max_recall,
-        "correct_entities": n_correct,
-        "gold_entities": n_gold,
-        "predicted_entities": sum(len(pred) for pred in predicted_entities)
-    }
+
+def max_possible_recall(filename, encoding, codelin_dir, verbose=False):
+    """Encode and decode a dataset, then calculate exact entity retention."""
+    with tempfile.TemporaryDirectory(prefix="nner-coverage-") as temp_directory:
+        temp = Path(temp_directory)
+        trees = Path(to_parenthesized(filename, temp / "gold.trees"))
+        labels = Path(encode(encoding, trees, temp / "encoded.labels", codelin_dir=codelin_dir))
+        decoded_trees = Path(
+            decode(encoding, labels, temp / "decoded.trees", codelin_dir=codelin_dir)
+        )
+        decoded_data = Path(trees_to_data(decoded_trees, temp / "decoded.data"))
+        gold_entities = find_entities(filename)
+        predicted_entities = find_entities(decoded_data)
+        if len(gold_entities) != len(predicted_entities):
+            raise ValueError("Encoded round trip changed the number of sentences")
+
+        n_correct = 0
+        n_gold = 0
+        for sentence_id, (gold, predicted) in enumerate(
+            zip(gold_entities, predicted_entities),
+            1,
+        ):
+            n_correct += len(gold & predicted)
+            n_gold += len(gold)
+            missed = gold - predicted
+            if verbose and missed:
+                print(f"Sentence {sentence_id}: missed {sorted(missed)}")
+        return {
+            "max_recall": 0.0 if n_gold == 0 else n_correct / n_gold,
+            "correct_entities": n_correct,
+            "gold_entities": n_gold,
+            "predicted_entities": sum(len(pred) for pred in predicted_entities),
+        }
+
 
 def save_results_to_csv(results, output_file):
-    """
-    Save results to a CSV file.
-    
-    Args:
-        results (list): List of dictionaries with results
-        output_file (str): Path to output CSV file
-    """
-    # Make sure directory exists
-    os.makedirs(os.path.dirname(output_file), exist_ok=True)
-    
-    # Get all unique keys to use as headers
-    headers = set()
-    for result in results:
-        headers.update(result.keys())
-    headers = sorted(list(headers))
-    
-    with open(output_file, 'w', newline='') as csvfile:
-        writer = csv.DictWriter(csvfile, fieldnames=headers)
+    output_file = Path(output_file)
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    headers = sorted({key for result in results for key in result})
+    with output_file.open("w", newline="", encoding="utf-8") as stream:
+        writer = csv.DictWriter(stream, fieldnames=headers)
         writer.writeheader()
         writer.writerows(results)
-    
-    print(f"Results saved to: {output_file}")
+
+
+def build_parser():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("datasets", nargs="+", help="dataset directory names")
+    parser.add_argument(
+        "--encodings",
+        nargs="+",
+        default=["ABS", "REL", "DYN", "4EC"],
+    )
+    parser.add_argument("--data-dir", type=Path, default=PROJECT_ROOT / "data")
+    parser.add_argument("--codelin-dir", type=Path, default=PROJECT_ROOT / "CoDeLin")
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=PROJECT_ROOT / "results" / "label_coverage.csv",
+    )
+    parser.add_argument("--verbose", action="store_true")
+    return parser
+
+
+def main(argv=None):
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    all_results = []
+    with tempfile.TemporaryDirectory(prefix="nner-joint-") as temporary_directory:
+        temporary_directory = Path(temporary_directory)
+        for dataset in args.datasets:
+            try:
+                joint_file = create_joint_file(
+                    args.data_dir / dataset,
+                    temporary_directory / f"{dataset}.data",
+                )
+                for encoding in args.encodings:
+                    result = max_possible_recall(
+                        joint_file,
+                        encoding,
+                        args.codelin_dir,
+                        args.verbose,
+                    )
+                    result.update(
+                        {
+                            "dataset": dataset,
+                            "encoding": encoding,
+                            "max_recall_percentage": f"{result['max_recall']:.2%}",
+                        }
+                    )
+                    all_results.append(result)
+                    print(
+                        f"{dataset}/{encoding}: {result['max_recall']:.2%} "
+                        f"({result['correct_entities']}/{result['gold_entities']})"
+                    )
+            except (FileNotFoundError, ValueError) as error:
+                parser.error(str(error))
+    save_results_to_csv(all_results, args.output)
+    print(f"Saved results to {args.output}")
+
 
 if __name__ == "__main__":
-    # Setup output file
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_file = f"results/label_coverage.csv"
-    
-    # Example usage
-    datasets = ["ace2004", "ace2005", "nne", "genia"]
-    encodings = ["ABS", "REL", "DYN", "4EC"]
-    
-    # Store all results for CSV
-    all_results = []
-    
-    for dataset_name in datasets:
-        print(f"Processing dataset: {dataset_name}")
-        data_file = create_joint_file(dataset_name)
-        
-        # Check if file exists
-        if not os.path.exists(data_file):
-            print(f"Warning: File {data_file} does not exist. Skipping.")
-            continue
-            
-        for encoding_type in encodings:
-            print(f"  Testing encoding: {encoding_type}")
-            
-            # Run the test
-            result = max_possible_recall(data_file, encoding_type)
-            
-            # Add metadata to result
-            result["dataset"] = dataset_name
-            result["encoding"] = encoding_type
-            result["max_recall_percentage"] = f"{result['max_recall']:.2%}"
-            
-            # Store result for CSV
-            all_results.append(result)
-            
-            # Print progress
-            print(f"  - Max Recall: {result['max_recall']:.2%}, "
-                  f"Correct: {result['correct_entities']}, "
-                  f"Gold: {result['gold_entities']}")
-    
-    # Save all results to CSV
-    save_results_to_csv(all_results, output_file)
+    main()

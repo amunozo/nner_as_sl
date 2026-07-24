@@ -1,3 +1,1 @@
-from .data import utils
-from .machamp import configs
-from .evaluation import utils, evaluator
+"""Nested NER sequence-labeling research code."""
